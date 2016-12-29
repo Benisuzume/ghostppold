@@ -1191,7 +1191,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
       }
 
       if ( Command != "kick" ) {
-        m_PairedBanAdds.push_back( PairedBanAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanAdd( m_Server, Victim, string( ), string( ), User, Reason, BanDuration, "ttr.cloud" ) ) );
+        m_PairedBanAdds.push_back( PairedBanAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanAdd( m_Server, Victim, string( ), string( ), User, Reason, BanDuration, "" ) ) );
       }
 
       boost::mutex::scoped_lock lock( m_GHost->m_GamesMutex );

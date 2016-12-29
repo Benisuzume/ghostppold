@@ -36,14 +36,14 @@ function escape($link, $str) {
 # updateBan will update your ban cache
 # the ban cache is used so that host bots can quickly synchronize with the master ban list
 #  without wasting bandwidth on bans that they already have
-# 'ttr.cloud' indicates a contextless ban, meaning that it applies globally
+#  blank indicates a contextless ban, meaning that it applies globally
 #  non-blank contexts indicate bans pertaining to a specific game owner
 function updateBan($link) {
 	# fix context for odd bans
-	$link->query("UPDATE bans SET context = 'ttr.cloud' WHERE context = '' OR context IS NULL");
-	
+	$link->query("UPDATE bans SET context = '' WHERE context IS NULL");
+
 	# add unrecorded bans to the ban history, but only 1000 at a time
-	$result = $link->query("SELECT id, server, name, ip, date, gamename, admin, reason, expiredate, botid FROM bans WHERE id > ( SELECT IFNULL(MAX(banid), 0) FROM ban_history ) AND context = 'ttr.cloud' ORDER BY id LIMIT 1000");
+	$result = $link->query("SELECT id, server, name, ip, date, gamename, admin, reason, expiredate, botid FROM bans WHERE id > ( SELECT IFNULL(MAX(banid), 0) FROM ban_history ) AND context = '' ORDER BY id LIMIT 1000");
 
 	while($result && $row = $result->fetch_array()) {
 		$id = escape($link, $row[0]);
@@ -56,10 +56,10 @@ function updateBan($link) {
 		$reason = escape($link, $row[7]);
 		$expiredate = escape($link, $row[8]);
 		$botid = escape($link, $row[9]);
-		
+
 		# insert into history table
 		$link->query("INSERT INTO ban_history ( banid, server, name, ip, date, gamename, admin, reason, expiredate ) VALUES ('$id', '$server', '$name', '$ip', '$date', '$gamename', '$admin', '$reason', '$expiredate')");
-		
+
 		# put banid in ban cache so that bots can update to it
 		$link->query("INSERT INTO bancache (banid, datetime, status) VALUES ('$id', NOW(), 0)"); # 0 means new ban, 1 means del ban
 	}
@@ -72,7 +72,7 @@ function updateBan($link) {
 # the table keeps track of total games played, stay percentage, and other data
 function gameTrack($link, $next_player) {
 	# track last bots that player used
-	
+
 	# create table if not already there
 	$link->query("
 CREATE TABLE IF NOT EXISTS `gametrack` (
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS `gametrack` (
   KEY `name` (`name`),
   KEY `realm` (`realm`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;");
-	
+
 	# get the next 5000 players
 	$result = $link->query("SELECT gameplayers.botid, name, spoofedrealm, gameid, gameplayers.id, (`left`/duration), duration FROM gameplayers LEFT JOIN games ON games.id = gameid WHERE gameplayers.id >= '$next_player' ORDER BY gameplayers.id LIMIT 5000");
 
@@ -100,30 +100,30 @@ CREATE TABLE IF NOT EXISTS `gametrack` (
 		$gameid = escape($link, $row[3]);
 		$leftpercent = escape($link, $row[5]);
 		$duration = escape($link, $row[6]);
-	
+
 		# see if this player already has an entry, and retrieve if there is
 		$checkResult = $link->query("SELECT bots, lastgames FROM gametrack WHERE name = '$name' AND realm = '$realm'");
-		
+
 		if($checkResult && $checkRow = $checkResult->fetch_array()) {
 			# update bots and lastgames shifting-window arrays
 			$bots = explode(',', $checkRow[0]);
 			$lastgames = explode(',', $checkRow[1]);
-		
+
 			if(in_array($botid, $bots)) {
 				$bots = array_diff($bots, array($botid));
 			}
-		
+
 			$bots[] = $botid;
 			$lastgames[] = $gameid;
-		
+
 			if(count($bots) > 10) {
 				array_shift($bots);
 			}
-		
+
 			if(count($lastgames) > 10) {
 				array_shift($lastgames);
 			}
-		
+
 			$botString = escape($link, implode(',', $bots));
 			$lastString = escape($link, implode(',', $lastgames));
 			$link->query("UPDATE gametrack SET bots = '$botString', lastgames = '$lastString', total_leftpercent = total_leftpercent + '$leftpercent', num_leftpercent = num_leftpercent + 1, num_games = num_games + 1, time_active = NOW(), playingtime = playingtime + '$duration' WHERE name = '$name' AND realm = '$realm'");
@@ -132,10 +132,10 @@ CREATE TABLE IF NOT EXISTS `gametrack` (
 			$lastString = escape($link, $gameid);
 			$link->query("INSERT INTO gametrack (name, realm, bots, lastgames, total_leftpercent, num_leftpercent, num_games, time_created, time_active, playingtime) VALUES ('$name', '$realm', '$botString', '$lastString', '$leftpercent', '1', '1', NOW(), NOW(), '$duration')");
 		}
-	
+
 		$next_player = $row[4] + 1;
 	}
-	
+
 	return $next_player;
 }
 

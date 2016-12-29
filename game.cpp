@@ -102,7 +102,7 @@ CGame :: ~CGame( )
       if ( EndTime - LeftTime > m_GHost->m_AutobanGameLimit ) {
         string CustomReason = "autoban: left at " + UTIL_ToString( LeftTime ) + "/" + UTIL_ToString( EndTime );
         string BanRealm = (*i)->GetSpoofedRealm( );
-        m_GHost->m_Callables.push_back( m_GHost->m_DB->ThreadedBanAdd( BanRealm, (*i)->GetName( ), (*i)->GetIP(), m_GameName, "autoban", CustomReason, 3600 * m_GHost->m_Autoban, "ttr.cloud" ));
+        m_GHost->m_Callables.push_back( m_GHost->m_DB->ThreadedBanAdd( BanRealm, (*i)->GetName( ), (*i)->GetIP(), m_GameName, "autoban", CustomReason, 3600 * m_GHost->m_Autoban, "" ));
       }
     }
   }
@@ -906,7 +906,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
         string userContext = User;
 
         if ( AdminCheck || RootAdminCheck ) {
-          userContext = "ttr.cloud";
+          userContext = "";
         } else {
           BanDuration = 3600 * m_GHost->m_PBanDuration; //!pban for non-admins to non give unexpected results
         }
@@ -1032,7 +1032,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       //
       else if ( Command == "banlast" && m_GameLoaded && !m_GHost->m_BNETs.empty( ) && m_DBBanLast ) {
         string userContext = User;
-        if ( AdminCheck || RootAdminCheck ) userContext = "ttr.cloud";
+        if ( AdminCheck || RootAdminCheck ) userContext = "";
 
         m_PairedBanAdds.push_back( PairedBanAdd( User, m_GHost->m_DB->ThreadedBanAdd( m_DBBanLast->GetServer( ), m_DBBanLast->GetName( ), m_DBBanLast->GetIP( ), m_GameName, User, Payload, 3600 * 48, userContext ) ) );
       }

@@ -902,7 +902,7 @@ CDBBan *MySQLBanCheck( void *conn, string *error, uint32_t botid, string server,
   }
 
   CDBBan *Ban = NULL;
-  Query = "SELECT id, name, ip, date, gamename, admin, reason, expiredate, context FROM bans WHERE ( context = 'ttr.cloud' OR context = '" + EscOwnerName + "' ) AND ((server='" + EscServer + "' AND name='" + EscUser + "')";
+  Query = "SELECT id, name, ip, date, gamename, admin, reason, expiredate, context FROM bans WHERE ( context = '' OR context = '" + EscOwnerName + "' ) AND ((server='" + EscServer + "' AND name='" + EscUser + "')";
 
   if ( !ip.empty( ) && !WhiteList ) {
     // first exact match
@@ -975,7 +975,7 @@ bool MySQLBanRemove( void *conn, string *error, uint32_t botid, string server, s
   bool Success = false;
   string Query = "DELETE FROM bans WHERE server='" + EscServer + "' AND name='" + EscUser + "'";
 
-  if ( EscContext != "" && EscContext != "ttr.cloud" ) {
+  if ( EscContext != "" ) {
     Query += " AND admin='" + EscContext + "'";
   }
 
@@ -997,7 +997,7 @@ bool MySQLBanRemove( void *conn, string *error, uint32_t botid, string user, str
   bool Success = false;
   string Query = "DELETE FROM bans WHERE name='" + EscUser + "'";
 
-  if ( EscContext != "" && EscContext != "ttr.cloud" ) {
+  if ( EscContext != "" ) {
     Query += " AND admin='" + EscContext + "'";
   }
 
