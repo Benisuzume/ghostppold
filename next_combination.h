@@ -9,9 +9,11 @@
 template<typename Value, typename Iterator>
 void disjoint_rotate(Iterator begin1, Iterator end1, size_t size1,
                      Iterator begin2, Iterator end2, size_t size2,
-                     Value *type) {
+                     Value *type)
+{
   const size_t total = size1 + size2;
   size_t gcd = total;
+
   for (size_t div = size1; div != 0; ) {
     gcd %= div;
     std::swap(gcd, div);
@@ -32,7 +34,8 @@ void disjoint_rotate(Iterator begin1, Iterator end1, size_t size1,
 }
 
 template<typename Iterator>
-bool next_combination(Iterator begin, Iterator mid, Iterator end) {
+bool next_combination(Iterator begin, Iterator mid, Iterator end)
+{
   if (begin == mid || mid == end) {
     return false;
   }

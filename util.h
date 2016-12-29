@@ -1,27 +1,30 @@
 /*
 
-	ent-ghost
-	Copyright [2011-2013] [Jack Lu]
+   uc-ghost
+   Copyright [2016-2017] [Nuno Anselmo]
 
-	This file is part of the ent-ghost source code.
+   This file is part of the uc-ghost source code.
 
-	ent-ghost is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
+   uc-ghost is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-	ent-ghost source code is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
+   uc-ghost source code is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with ent-ghost source code. If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with uc-ghost source code. If not, see <http://www.gnu.org/licenses/>.
 
-	ent-ghost is modified from GHost++ (http://ghostplusplus.googlecode.com/)
-	GHost++ is Copyright [2008] [Trevor Hogan]
+   uc-ghost is modified from ent-ghost (https://github.com/uakfdotb/ent-ghost)
+   ent-ghost is Copyright [2011-2013] [Jack Lu]
 
-*/
+   ent-ghost is modified from GHost++ (http://ghostplusplus.googlecode.com/)
+   GHost++ is Copyright [2008] [Trevor Hogan]
+
+ */
 
 #ifndef UTIL_H
 #define UTIL_H
@@ -92,7 +95,7 @@ vector<string> UTIL_Tokenize( string s, char delim );
 
 uint32_t UTIL_Factorial( uint32_t x );
 
-#define nCr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n)-(r)) / UTIL_Factorial(r))
-#define nPr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n)-(r)))
+#define nCr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n) - (r)) / UTIL_Factorial(r))
+#define nPr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n) - (r)))
 
 #endif
