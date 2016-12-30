@@ -1036,10 +1036,31 @@ void CBNET :: ProcessChatEvent( CIncomingChatEvent *chatEvent )
       BotCommand( Message, User, Whisper, false );
     }
   } else if ( Event == CBNETProtocol :: EID_CHANNEL ) {
-    // keep track of current channel so we can rejoin it after hosting a game
-
+    // Switched channels
     CONSOLE_Print( "[BNET: " + m_ServerAlias + "] joined channel [" + Message + "]" );
     m_CurrentChannel = Message;
+    ChannelClear();
+  } else if ( Event == CBNETProtocol :: EID_SHOWUSER ) {
+    // Player discovered after switching channels
+    CONSOLE_Print( "[BNET: " + m_ServerAlias + "] user [" + Message + "] in channel " + m_CurrentChannel );
+    ChannelAdd(User);
+  }else if ( Event == CBNETProtocol :: EID_JOIN ) {
+    // Player entered our channel
+    CONSOLE_Print( "[BNET: " + m_ServerAlias + "] user [" + User + "] joined channel " + m_CurrentChannel );
+    ChannelAdd(User);
+
+    // Send welcome message
+    for (vector<string>::const_iterator i = m_GHost->m_ChannelWelcome.begin(); i != m_GHost->m_ChannelWelcome.end(); i++) {
+      string line = *i;
+      UTIL_Replace( line, "$USER$", User );
+      UTIL_Replace( line, "$CLANRANK$", GetClanRank( User ) );
+      UTIL_Replace( line, "$CHANNEL$", m_CurrentChannel );
+      QueueChatCommand( line, User, Whisper );
+    }
+  } else if ( Event == CBNETProtocol :: EID_LEAVE ) {
+    // Player left our channel
+    CONSOLE_Print( "[BNET: " + m_ServerAlias + "] user [" + User + "] leaves channel " + m_CurrentChannel );
+    ChannelRemove(User);
   } else if ( Event == CBNETProtocol :: EID_INFO ) {
     CONSOLE_Print( "[INFO: " + m_ServerAlias + "] " + Message );
 
@@ -1915,14 +1936,27 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !SLAP
     //
     else if ( (Command == "slap" ) && !Payload.empty() && !m_GHost->m_SlapPhrases.empty() ) {
-      //pick a phrase
-      uint32_t numPhrases = m_GHost->m_SlapPhrases.size();
-      uint32_t randomPhrase = rand() % numPhrases;
+      // Get a random message
+      uint32_t NumPhrases = m_GHost->m_SlapPhrases.size();
+      uint32_t RandomPhrase = rand() % NumPhrases;
+      string SlapText = m_GHost->m_SlapPhrases[RandomPhrase];
 
-      string phrase = m_GHost->m_SlapPhrases[randomPhrase];
-      uint32_t nameIndex = phrase.find_first_of("[") + 1;
+      string LastMatch = NULL;
+      uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+
+      string Victim;
+      if ( Matches == 1 ) {
+        Victim = LastMatch;
+      } else {
+        Victim = Payload;
+      }
+
+      // Replace keywords
+      UTIL_Replace( SlapText, "$USER$", User );
+      UTIL_Replace( SlapText, "$VICTIM$", Victim );
+
       if (!Whisper) {
-        QueueChatCommand("[" + User + "] " + phrase.insert(nameIndex, Payload), User, Whisper);
+        QueueChatCommand( SlapText, User, Whisper );
       }
     }
     //
@@ -2303,4 +2337,64 @@ void CBNET :: HoldClan( CBaseGame *game )
       game->AddToReserved( (*i)->GetName( ) );
     }
   }
+}
+
+string CBNET :: GetClanRank( string name )
+{
+  for ( vector<CIncomingClanList *> :: iterator i = m_Clans.begin( ); i != m_Clans.end( ); ++i ) {
+    if ((*i)->GetName() == name) {
+      return (*i)->GetRank();
+    }
+  }
+  return "Non-Member";
+}
+
+void CBNET :: ChannelAdd( string name )
+{
+  for ( vector<string> :: iterator i = m_ChannelUsers.begin( ); i != m_ChannelUsers.end( ); i++ ) {
+    if ( *i == name ) {
+      return;
+    }
+  }
+  m_ChannelUsers.push_back( name );
+}
+
+void CBNET :: ChannelRemove( string name )
+{
+  for ( vector<string> :: iterator i = m_ChannelUsers.begin( ); i != m_ChannelUsers.end( ); i++ ) {
+    if ( *i == name ) {
+      m_ChannelUsers.erase(i);
+      return;
+    }
+  }
+}
+
+void CBNET :: ChannelClear( )
+{
+  m_ChannelUsers.clear();
+}
+
+uint32_t CBNET :: GetPlayerFromNamePartial( string name, string *lastMatch )
+{
+  transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
+  uint32_t matches = 0;
+
+  // Try to partially match the name
+  for ( vector<string> :: iterator i = m_ChannelUsers.begin( ); i != m_ChannelUsers.end( ); i++ ) {
+    string TestName = *i;
+    transform( TestName.begin( ), TestName.end( ), TestName.begin( ), (int (*)(int))tolower );
+
+    if ( TestName.find( name ) != string :: npos) {
+      matches++;
+      *lastMatch = *i;
+
+      // If an exact match is found
+      if ( name == *i ) {
+        matches = 1;
+        break;
+      }
+    }
+  }
+
+  return matches;
 }

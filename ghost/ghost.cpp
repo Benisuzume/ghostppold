@@ -620,7 +620,7 @@ CGHost :: CGHost( CConfig *CFG )
   CONSOLE_Print("[GHOST] Loading slap phrases...");
 
   ifstream phrasein;
-  phrasein.open( "phrase.txt" );
+  phrasein.open( m_PhraseFile.c_str() );
 
   if ( phrasein.fail( ) ) {
     CONSOLE_Print("[GHOST] Slap phrase load failed!");
@@ -638,6 +638,29 @@ CGHost :: CGHost( CConfig *CFG )
 
     phrasein.close( );
   }
+
+  ifstream welcomein;
+	welcomein.open( m_WelcomeFile.c_str() );
+
+	if( welcomein.fail( ) )
+	{
+		CONSOLE_Print("[GHOST] Channel welcome text load failed!");
+		perror("Fail");
+	}
+	else
+	{
+		string Line;
+
+		while( !welcomein.eof( ) )
+		{
+			getline( welcomein, Line );
+
+			if( !Line.empty( ) )
+				m_ChannelWelcome.push_back(Line);
+		}
+
+		welcomein.close( );
+	}
 
   CONSOLE_Print( "[GHOST] Loading GeoIP data" );
   m_GeoIP = GeoIP_open( m_GeoIPFile.c_str( ), GEOIP_STANDARD | GEOIP_CHECK_CACHE );
@@ -1278,6 +1301,8 @@ void CGHost :: SetConfigs( CConfig *CFG )
   m_GameLoadedFile = CFG->GetString( "bot_gameloadedfile", "gameloaded.txt" );
   m_GameOverFile = CFG->GetString( "bot_gameoverfile", "gameover.txt" );
   m_GeoIPFile = CFG->GetString( "bot_geoipfile", "geoip.dat" );
+  m_WelcomeFile = CFG->GetString( "bot_welcomefile", "welcome.txt" );
+  m_PhraseFile = CFG->GetString( "bot_phrasefile", "phrase.txt" );
   m_LocalAdminMessages = CFG->GetInt( "bot_localadminmessages", 1 ) == 0 ? false : true;
   m_TCPNoDelay = CFG->GetInt( "tcp_nodelay", 0 ) == 0 ? false : true;
   m_MatchMakingMethod = CFG->GetInt( "bot_matchmakingmethod", 1 );

@@ -1569,19 +1569,24 @@ void CBaseGame :: SendWelcomeMessage( CGamePlayer *player )
     // custom welcome message
     // don't print more than 8 lines
 
-    // get botname replacement
+    // Get BotName
     string BotName = "Unknown";
-
     if ( !m_GHost->m_BNETs.empty( ) ) {
       BotName = m_GHost->m_BNETs[0]->GetUserName( );
     }
 
+    // Get PlayerName
+    string PlayerName = player->GetName();
+
     uint32_t Count = 0;
     string Line;
 
-    while ( !in.eof( ) && Count < 8 ) {
+    while ( !in.eof( ) && Count++ < 8 ) {
       getline( in, Line );
       UTIL_Replace( Line, "$BOTNAME$", BotName );
+      UTIL_Replace( Line, "$PLAYERNAME$", PlayerName );
+      UTIL_Replace( Line, "$GAMENAME$", m_GameName );
+      UTIL_Replace( Line, "$HCLSTRING$", m_HCLCommandString );
 
       if ( Line.empty( ) ) {
         if ( !in.eof( ) ) {
@@ -1590,8 +1595,6 @@ void CBaseGame :: SendWelcomeMessage( CGamePlayer *player )
       } else {
         SendChat( player, Line );
       }
-
-      ++Count;
     }
 
     in.close( );

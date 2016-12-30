@@ -72,6 +72,7 @@ CUDPSocket *m_LocalSocket;               // a UDP socket for sending broadcasts 
 CTCPServer *m_ReconnectSocket;           // listening socket for GProxy++ reliable reconnects
 vector<CTCPSocket *> m_ReconnectSockets; // vector of sockets attempting to reconnect (connected but not identified yet)
 vector<string> m_SlapPhrases;            // vector of phrases
+vector<string> m_ChannelWelcome;         // vector of lines for channel welcome
 CGPSProtocol *m_GPSProtocol;
 CGCBIProtocol *m_GCBIProtocol;
 CCRC32 *m_CRC;                       // for calculating CRC's
@@ -156,6 +157,8 @@ string m_MOTDFile;               // config value: motd.txt
 string m_GameLoadedFile;         // config value: gameloaded.txt
 string m_GameOverFile;           // config value: gameover.txt
 string m_GeoIPFile;              // config value: geoip.dat file
+string m_WelcomeFile;            // config value: welcome.txt
+string m_PhraseFile;             // config value: phrase.txt
 bool m_LocalAdminMessages;       // config value: send local admin messages or not
 unsigned char m_LANWar3Version;  // config value: LAN warcraft 3 version
 uint32_t m_ReplayWar3Version;    // config value: replay warcraft 3 version (for saving replays)

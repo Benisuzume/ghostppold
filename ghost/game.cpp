@@ -2352,13 +2352,26 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   // !SLAP
   //
   else if ( (Command == "slap" ) && !Payload.empty() && !m_GHost->m_SlapPhrases.empty() ) {
-    //pick a phrase
-    uint32_t numPhrases = m_GHost->m_SlapPhrases.size();
-    uint32_t randomPhrase = rand() % numPhrases;
+    // Get a random message
+    uint32_t NumPhrases = m_GHost->m_SlapPhrases.size();
+    uint32_t RandomPhrase = rand() % NumPhrases;
+    string SlapText = m_GHost->m_SlapPhrases[RandomPhrase];
 
-    string phrase = m_GHost->m_SlapPhrases[randomPhrase];
-    uint32_t nameIndex = phrase.find_first_of("[") + 1;
-    SendAllChat("[" + User + "] " + phrase.insert(nameIndex, Payload));
+    CGamePlayer *LastMatch = NULL;
+    uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+
+    string Victim;
+    if ( Matches == 1 ) {
+      Victim = LastMatch->GetName( );
+    } else {
+      Victim = Payload;
+    }
+
+    // Replace keywords
+    UTIL_Replace( SlapText, "$USER$", User );
+    UTIL_Replace( SlapText, "$VICTIM$", Victim );
+
+    SendAllChat( SlapText );
 
     HideCommand = true;
   }
