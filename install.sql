@@ -333,10 +333,8 @@ CREATE TABLE `games` (
 CREATE TABLE `gametrack` (
   `name` varchar(15) DEFAULT NULL,
   `realm` varchar(100) DEFAULT NULL,
-  `bots` varchar(40) DEFAULT NULL,
   `lastgames` varchar(100) DEFAULT NULL,
   `total_leftpercent` double DEFAULT NULL,
-  `num_leftpercent` int(11) DEFAULT NULL,
   `num_games` int(11) DEFAULT NULL,
   `time_created` TIMESTAMP DEFAULT 0,
   `time_active` TIMESTAMP DEFAULT 0,

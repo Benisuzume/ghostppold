@@ -2,28 +2,31 @@
 
 /*
 
-	ent-ghost
-	Copyright [2011-2013] [Jack Lu]
+   uc-ghost
+   Copyright [2016-2017] [Nuno Anselmo]
 
-	This file is part of the ent-ghost source code.
+   This file is part of the uc-ghost source code.
 
-	ent-ghost is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
+   uc-ghost is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-	ent-ghost source code is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	GNU General Public License for more details.
+   uc-ghost source code is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with ent-ghost source code. If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with uc-ghost source code. If not, see <http://www.gnu.org/licenses/>.
 
-	ent-ghost is modified from GHost++ (http://ghostplusplus.googlecode.com/)
-	GHost++ is Copyright [2008] [Trevor Hogan]
+   uc-ghost is modified from ent-ghost (https://github.com/uakfdotb/ent-ghost)
+   ent-ghost is Copyright [2011-2013] [Jack Lu]
 
-*/
+   ent-ghost is modified from GHost++ (http://ghostplusplus.googlecode.com/)
+   GHost++ is Copyright [2008] [Trevor Hogan]
+
+ */
 
 # this file contains a list of cron functions that you may wish to use on your database
 # you must provide each function with a mysqli database link from an external cron script
@@ -71,24 +74,6 @@ function updateBan($link) {
 # this will update the gametrack table
 # the table keeps track of total games played, stay percentage, and other data
 function gameTrack($link, $next_player) {
-	# track last bots that player used
-
-	# create table if not already there
-	$link->query("
-CREATE TABLE IF NOT EXISTS `gametrack` (
-  `name` varchar(15) DEFAULT NULL,
-  `realm` varchar(100) DEFAULT NULL,
-  `bots` varchar(40) DEFAULT NULL,
-  `lastgames` varchar(100) DEFAULT NULL,
-  `total_leftpercent` double DEFAULT NULL,
-  `num_leftpercent` int(11) DEFAULT NULL,
-  `num_games` int(11) DEFAULT NULL,
-  `time_created` datetime DEFAULT NULL,
-  `time_active` datetime DEFAULT NULL,
-  `playingtime` INT DEFAULT NULL,
-  KEY `name` (`name`),
-  KEY `realm` (`realm`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;");
 
 	# get the next 5000 players
 	$result = $link->query("SELECT gameplayers.botid, name, spoofedrealm, gameid, gameplayers.id, (`left`/duration), duration FROM gameplayers LEFT JOIN games ON games.id = gameid WHERE gameplayers.id >= '$next_player' ORDER BY gameplayers.id LIMIT 5000");
@@ -102,35 +87,22 @@ CREATE TABLE IF NOT EXISTS `gametrack` (
 		$duration = escape($link, $row[6]);
 
 		# see if this player already has an entry, and retrieve if there is
-		$checkResult = $link->query("SELECT bots, lastgames FROM gametrack WHERE name = '$name' AND realm = '$realm'");
+		$checkResult = $link->query("SELECT lastgames FROM gametrack WHERE name = '$name' AND realm = '$realm'");
 
 		if($checkResult && $checkRow = $checkResult->fetch_array()) {
-			# update bots and lastgames shifting-window arrays
-			$bots = explode(',', $checkRow[0]);
-			$lastgames = explode(',', $checkRow[1]);
-
-			if(in_array($botid, $bots)) {
-				$bots = array_diff($bots, array($botid));
-			}
-
-			$bots[] = $botid;
+			# lastgames shifting-window arrays
+			$lastgames = explode(',', $checkRow[0]);
 			$lastgames[] = $gameid;
-
-			if(count($bots) > 10) {
-				array_shift($bots);
-			}
 
 			if(count($lastgames) > 10) {
 				array_shift($lastgames);
 			}
 
-			$botString = escape($link, implode(',', $bots));
 			$lastString = escape($link, implode(',', $lastgames));
-			$link->query("UPDATE gametrack SET bots = '$botString', lastgames = '$lastString', total_leftpercent = total_leftpercent + '$leftpercent', num_leftpercent = num_leftpercent + 1, num_games = num_games + 1, time_active = NOW(), playingtime = playingtime + '$duration' WHERE name = '$name' AND realm = '$realm'");
+			$link->query("UPDATE gametrack SET lastgames = '$lastString', total_leftpercent = total_leftpercent + '$leftpercent', num_games = num_games + 1, time_active = NOW(), playingtime = playingtime + '$duration' WHERE name = '$name' AND realm = '$realm'");
 		} else {
-			$botString = escape($link, $botid);
 			$lastString = escape($link, $gameid);
-			$link->query("INSERT INTO gametrack (name, realm, bots, lastgames, total_leftpercent, num_leftpercent, num_games, time_created, time_active, playingtime) VALUES ('$name', '$realm', '$botString', '$lastString', '$leftpercent', '1', '1', NOW(), NOW(), '$duration')");
+			$link->query("INSERT INTO gametrack (name, realm, lastgames, total_leftpercent, num_games, time_created, time_active, playingtime) VALUES ('$name', '$realm', '$lastString', '$leftpercent', '1', NOW(), NOW(), '$duration')");
 		}
 
 		$next_player = $row[4] + 1;
