@@ -8,6 +8,12 @@ CREATE TABLE `admins` (
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+CREATE TABLE `announce` (
+  `name` varchar(64) NOT NULL,
+  `message` varchar(128) DEFAULT NULL,
+  KEY `name` (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 CREATE TABLE `ban_history` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `banid` int(11) DEFAULT NULL,

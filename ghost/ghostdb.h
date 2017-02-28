@@ -44,6 +44,7 @@ class CCallableBanCheck;
 class CCallableBanAdd;
 class CCallableBanRemove;
 class CCallableSpoofList;
+class CCallableAnnounceList;
 class CCallableReconUpdate;
 class CCallableCommandList;
 class CCallableGameAdd;
@@ -121,6 +122,7 @@ virtual uint32_t BanAdd( string server, string user, string ip, string gamename,
 virtual bool BanRemove( string server, string user, string context );
 virtual bool BanRemove( string user, string context );
 virtual map<string, string> SpoofList( );
+virtual map<string, string> AnnounceList( );
 virtual void ReconUpdate( uint32_t hostcounter, uint32_t seconds );
 virtual vector<string> CommandList(  );
 virtual uint32_t GameAdd( string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
@@ -159,6 +161,7 @@ virtual CCallableBanAdd *ThreadedBanAdd( string server, string user, string ip, 
 virtual CCallableBanRemove *ThreadedBanRemove( string server, string user, string context );
 virtual CCallableBanRemove *ThreadedBanRemove( string user, string context );
 virtual CCallableSpoofList *ThreadedSpoofList( );
+virtual CCallableAnnounceList *ThreadedAnnounceList( );
 virtual CCallableReconUpdate *ThreadedReconUpdate( uint32_t hostcounter, uint32_t seconds );
 virtual CCallableCommandList *ThreadedCommandList( );
 virtual CCallableGameAdd *ThreadedGameAdd( string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
@@ -575,6 +578,27 @@ CCallableSpoofList( ) : CBaseCallable( )
 {
 }
 virtual ~CCallableSpoofList( );
+
+virtual map<string, string> GetResult( )
+{
+  return m_Result;
+}
+virtual void SetResult( map<string, string> nResult )
+{
+  m_Result = nResult;
+}
+};
+
+class CCallableAnnounceList : virtual public CBaseCallable
+{
+protected:
+map<string, string> m_Result;
+
+public:
+CCallableAnnounceList( ) : CBaseCallable( )
+{
+}
+virtual ~CCallableAnnounceList( );
 
 virtual map<string, string> GetResult( )
 {

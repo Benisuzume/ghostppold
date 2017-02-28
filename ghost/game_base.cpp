@@ -1601,6 +1601,34 @@ void CBaseGame :: SendWelcomeMessage( CGamePlayer *player )
   }
 }
 
+void CBaseGame :: SendAnnounceMessage( CGamePlayer *player )
+{
+  string AnnounceMessage = m_GHost->GetAnnounceMessage( player->GetName( ) + "@" + player->GetJoinedRealm( ) );
+
+  if ( AnnounceMessage.empty( ) ) {
+    return;
+  }
+
+  // Get BotName
+  string BotName = "Unknown";
+  if ( !m_GHost->m_BNETs.empty( ) ) {
+    BotName = m_GHost->m_BNETs[0]->GetUserName( );
+  }
+
+  // Get PlayerName
+  string PlayerName = player->GetName( );
+
+  // Get PlayerRealm
+  string PlayerRealm = player->GetJoinedRealm( );
+
+  UTIL_Replace( AnnounceMessage, "$BOTNAME$", BotName );
+  UTIL_Replace( AnnounceMessage, "$PLAYERNAME$", PlayerName );
+  UTIL_Replace( AnnounceMessage, "$PLAYERREALM$", PlayerRealm );
+  UTIL_Replace( AnnounceMessage, "$GAMENAME$", m_GameName );
+
+  SendAllChat( AnnounceMessage );
+}
+
 void CBaseGame :: SendEndMessage( )
 {
   // read from gameover.txt if available

@@ -394,6 +394,9 @@ CGHost :: CGHost( CConfig *CFG )
   m_CallableSpoofList = NULL;
   m_LastSpoofRefreshTime = 0;
 
+  m_CallableAnnounceList = NULL;
+  m_LastAnnounceRefreshTime = 0;
+
   CONSOLE_Print( "[GHOST] opening primary database" );
 
   m_DB = new CGHostDBMySQL( CFG );
@@ -1111,6 +1114,24 @@ bool CGHost :: Update( long usecBlock )
     lock.unlock( );
   }
 
+  // refresh announce list
+
+  if ( !m_CallableAnnounceList && GetTime( ) - m_LastAnnounceRefreshTime >= 1200 ) {
+    m_CallableAnnounceList = m_DB->ThreadedAnnounceList( );
+  }
+
+  if ( m_CallableAnnounceList && m_CallableAnnounceList->GetReady( ) ) {
+    boost::mutex::scoped_lock lock( m_AnnounceMutex );
+
+    m_AnnounceList = m_CallableAnnounceList->GetResult( );
+    m_DB->RecoverCallable( m_CallableAnnounceList );
+    delete m_CallableAnnounceList;
+    m_CallableAnnounceList = NULL;
+    m_LastAnnounceRefreshTime = GetTime( );
+
+    lock.unlock( );
+  }
+
   //clean the deny table every two minutes
 
   if ( GetTime( ) - m_LastDenyCleanTime >= 120 ) {
@@ -1222,6 +1243,19 @@ string CGHost :: GetSpoofName( string name )
   boost::mutex::scoped_lock lock( m_SpoofMutex );
   if ( m_SpoofList.count( name ) > 0 ) {
     return m_SpoofList[name];
+  }
+  lock.unlock( );
+
+  return string( );
+}
+
+string CGHost :: GetAnnounceMessage( string name )
+{
+  transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
+
+  boost::mutex::scoped_lock lock( m_AnnounceMutex );
+  if ( m_AnnounceList.count( name ) > 0 ) {
+    return m_AnnounceList[name];
   }
   lock.unlock( );
 

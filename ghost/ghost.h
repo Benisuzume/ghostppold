@@ -52,6 +52,7 @@ class CSaveGame;
 class CConfig;
 class CCallableCommandList;
 class CCallableSpoofList;
+class CCallableAnnounceList;
 struct DenyInfo;
 struct HostNameInfo;
 
@@ -197,6 +198,11 @@ map<string, string> m_SpoofList;         // donators can opt to spoof their name
 uint32_t m_LastSpoofRefreshTime;         // refresh spoof list every 2 hours
 CCallableSpoofList *m_CallableSpoofList; // spoof list refresh in progress
 
+boost::mutex m_AnnounceMutex;
+map<string, string> m_AnnounceList;            // certain users can have announcements on lobby join
+uint32_t m_LastAnnounceRefreshTime;            // refresh announcements list every 2 hours
+CCallableAnnounceList *m_CallableAnnounceList; // announcement list refresh in progress
+
 bool m_DisableBot;                       // whether this bot is currently disabled
 
 deque<HostNameInfo> m_HostNameCache;     // host name lookup cache
@@ -234,6 +240,7 @@ void DenyIP( string ip, uint32_t duration, string reason );
 bool CheckDeny( string ip );
 bool FlameCheck( string message );
 string GetSpoofName( string name );
+string GetAnnounceMessage( string name );
 bool IsLocal( string ip );
 string FromCheck( string ip );
 string HostNameLookup( string ip );

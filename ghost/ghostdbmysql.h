@@ -206,6 +206,7 @@ virtual CCallableBanAdd *ThreadedBanAdd( string server, string user, string ip, 
 virtual CCallableBanRemove *ThreadedBanRemove( string server, string user, string context );
 virtual CCallableBanRemove *ThreadedBanRemove( string user, string context );
 virtual CCallableSpoofList *ThreadedSpoofList( );
+virtual CCallableAnnounceList *ThreadedAnnounceList( );
 virtual CCallableReconUpdate *ThreadedReconUpdate( uint32_t hostcounter, uint32_t seconds );
 virtual CCallableCommandList *ThreadedCommandList(  );
 virtual CCallableGameAdd *ThreadedGameAdd( string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
@@ -252,6 +253,7 @@ uint32_t MySQLBanAdd( void *conn, string *error, uint32_t botid, string server, 
 bool MySQLBanRemove( void *conn, string *error, uint32_t botid, string server, string user, string context );
 bool MySQLBanRemove( void *conn, string *error, uint32_t botid, string user, string context );
 map<string, string> MySQLSpoofList( void *conn, string *error, uint32_t botid );
+map<string, string> MySQLAnnounceList( void *conn, string *error, uint32_t botid );
 void MySQLReconUpdate( void *conn, string *error, uint32_t botid, uint32_t hostcounter, uint32_t seconds );
 vector<string> MySQLCommandList( void *conn, string *error, uint32_t botid );
 uint32_t MySQLGameAdd( void *conn, string *error, uint32_t botid, string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
@@ -507,6 +509,27 @@ CMySQLCallableSpoofList( void *nConnection, uint32_t nSQLBotID, string nSQLServe
 {
 }
 virtual ~CMySQLCallableSpoofList( )
+{
+}
+
+virtual void operator()( );
+virtual void Init( )
+{
+  CMySQLCallable :: Init( );
+}
+virtual void Close( )
+{
+  CMySQLCallable :: Close( );
+}
+};
+
+class CMySQLCallableAnnounceList : public CCallableAnnounceList, public CMySQLCallable
+{
+public:
+CMySQLCallableAnnounceList( void *nConnection, uint32_t nSQLBotID, string nSQLServer, string nSQLDatabase, string nSQLUser, string nSQLPassword, uint16_t nSQLPort, CGHostDBMySQL *nDB ) : CBaseCallable( ), CCallableAnnounceList( ), CMySQLCallable( nConnection, nSQLBotID, nSQLServer, nSQLDatabase, nSQLUser, nSQLPassword, nSQLPort, nDB )
+{
+}
+virtual ~CMySQLCallableAnnounceList( )
 {
 }
 

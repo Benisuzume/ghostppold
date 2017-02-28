@@ -116,6 +116,11 @@ map<string, string> CGHostDB :: SpoofList( )
   return map<string, string>( );
 }
 
+map<string, string> CGHostDB :: AnnounceList( )
+{
+  return map<string, string>( );
+}
+
 void CGHostDB :: ReconUpdate( uint32_t hostcounter, uint32_t seconds )
 {
 
@@ -287,6 +292,11 @@ CCallableBanRemove *CGHostDB :: ThreadedBanRemove( string user, string context )
 }
 
 CCallableSpoofList *CGHostDB :: ThreadedSpoofList( )
+{
+  return NULL;
+}
+
+CCallableAnnounceList *CGHostDB :: ThreadedAnnounceList( )
 {
   return NULL;
 }
@@ -477,6 +487,11 @@ CCallableBanRemove :: ~CCallableBanRemove( )
 }
 
 CCallableSpoofList :: ~CCallableSpoofList( )
+{
+  // don't delete anything in m_Result here, it's the caller's responsibility
+}
+
+CCallableAnnounceList :: ~CCallableAnnounceList( )
 {
   // don't delete anything in m_Result here, it's the caller's responsibility
 }
