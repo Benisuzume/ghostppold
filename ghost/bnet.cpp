@@ -266,7 +266,7 @@ bool CBNET :: Update( void *fd, void *send_fd )
   for ( vector<PairedAdminAdd> :: iterator i = m_PairedAdminAdds.begin( ); i != m_PairedAdminAdds.end( ); ) {
     if ( i->second->GetReady( ) ) {
       if ( i->second->GetResult( ) ) {
-        AddAdmin( i->second->GetUser( ) );
+        AddAdmin( i->second->GetUser( ), i->second->GetAccess( ) );
         QueueChatCommand( m_GHost->m_Language->AddedUserToAdminDatabase( m_Server, i->second->GetUser( ) ), i->first, !i->first.empty( ) );
       } else {
         QueueChatCommand( m_GHost->m_Language->ErrorAddingUserToAdminDatabase( m_Server, i->second->GetUser( ) ), i->first, !i->first.empty( ) );
@@ -1157,9 +1157,21 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     Command = Message.substr( 1 );
   }
 
+  bitset<16> AdminAccess = bitset<16>((unsigned short int) 0);
+
+  // Lazy approach, but it saves a function declaration and lots of scope meddling for, essentially, abstraction
+  #define HasAccess( position ) AdminAccess.test( position )
+
+  if ( ForceRoot || IsRootAdmin( User ) ) {
+    AdminAccess.reset();
+    AdminAccess.flip();
+  } else if ( IsAdmin( User ) ) {
+    AdminAccess = GetAccess( User );
+  }
+
   transform( Command.begin( ), Command.end( ), Command.begin( ), (int (*)(int))tolower );
 
-  if ( IsAdmin( User ) || IsRootAdmin( User ) || ForceRoot ) {
+  if ( AdminAccess.any() ) {
     CONSOLE_Print( "[BNET: " + m_ServerAlias + "] admin [" + User + "] sent command [" + Message + "]" );
 
     /*****************
@@ -1171,16 +1183,17 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     //
 
     if ( Command == "addadmin" && !Payload.empty( ) ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_MANAGEMENT ) ) {
         if ( IsAdmin( Payload ) ) {
           QueueChatCommand( m_GHost->m_Language->UserIsAlreadyAnAdmin( m_Server, Payload ), User, Whisper );
         } else {
-          m_PairedAdminAdds.push_back( PairedAdminAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedAdminAdd( m_Server, Payload ) ) );
+          m_PairedAdminAdds.push_back( PairedAdminAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedAdminAdd( m_Server, Payload, DEFAULT_ACCESS ) ) );
         }
       } else {
         QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
+
     //
     // !ADDBAN
     // !BAN
@@ -1212,30 +1225,41 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
       }
 
       if ( Command != "kick" ) {
-        m_PairedBanAdds.push_back( PairedBanAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanAdd( m_Server, Victim, string( ), string( ), User, Reason, BanDuration, "" ) ) );
+        string userContext = User;
+
+        if ( HasAccess( ACCESS_BAN ) ) {
+          userContext = "";
+        }
+
+        m_PairedBanAdds.push_back( PairedBanAdd( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanAdd( m_Server, Victim, string( ), string( ), User, Reason, BanDuration, userContext ) ) );
       }
 
-      boost::mutex::scoped_lock lock( m_GHost->m_GamesMutex );
+      if ( HasAccess( ACCESS_KICK )) {
+        boost::mutex::scoped_lock lock( m_GHost->m_GamesMutex );
 
-      if ( m_GHost->m_CurrentGame ) {
-        boost::mutex::scoped_lock sayLock( m_GHost->m_CurrentGame->m_SayGamesMutex );
-        m_GHost->m_CurrentGame->m_DoSayGames.push_back( "/kick " + Victim );
-        sayLock.unlock( );
+        if ( m_GHost->m_CurrentGame ) {
+          boost::mutex::scoped_lock sayLock( m_GHost->m_CurrentGame->m_SayGamesMutex );
+          m_GHost->m_CurrentGame->m_DoSayGames.push_back( "/kick " + Victim );
+          sayLock.unlock( );
+        }
+
+        for ( vector<CBaseGame *> :: iterator i = m_GHost->m_Games.begin( ); i != m_GHost->m_Games.end( ); ++i ) {
+          boost::mutex::scoped_lock sayLock( (*i)->m_SayGamesMutex );
+          (*i)->m_DoSayGames.push_back( "/kick " + Victim );
+          sayLock.unlock( );
+        }
+
+        lock.unlock( );
+      } else if ( Command == "kick" ) {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
-
-      for ( vector<CBaseGame *> :: iterator i = m_GHost->m_Games.begin( ); i != m_GHost->m_Games.end( ); ++i ) {
-        boost::mutex::scoped_lock sayLock( (*i)->m_SayGamesMutex );
-        (*i)->m_DoSayGames.push_back( "/kick " + Victim );
-        sayLock.unlock( );
-      }
-
-      lock.unlock( );
     }
+
     //
     // !AUTOHOST
     //
     else if ( Command == "autohost" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_CONTROL ) ) {
         if ( Payload.empty( ) || Payload == "off" ) {
           QueueChatCommand( m_GHost->m_Language->AutoHostDisabled( ), User, Whisper );
           m_GHost->m_AutoHostGameName.clear( );
@@ -1300,7 +1324,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !AUTOHOSTMM
     //
     else if ( Command == "autohostmm" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_CONTROL ) ) {
         if ( Payload.empty( ) || Payload == "off" ) {
           QueueChatCommand( m_GHost->m_Language->AutoHostDisabled( ), User, Whisper );
           m_GHost->m_AutoHostGameName.clear( );
@@ -1379,13 +1403,17 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !CHANNEL (change channel)
     //
     else if ( Command == "channel" && !Payload.empty( ) ) {
-      QueueChatCommand( "/join " + Payload );
+      if ( HasAccess( ACCESS_CONTROL ) || HasAccess( ACCESS_SAY ) ) {
+        QueueChatCommand( "/join " + Payload );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !CHECKADMIN
     //
     else if ( Command == "checkadmin" && !Payload.empty( ) ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_MANAGEMENT ) ) {
         if ( IsAdmin( Payload ) ) {
           QueueChatCommand( m_GHost->m_Language->UserIsAnAdmin( m_Server, Payload ), User, Whisper );
         } else {
@@ -1399,7 +1427,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !COUNTADMINS
     //
     else if ( Command == "countadmins" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_MANAGEMENT ) ) {
         m_PairedAdminCounts.push_back( PairedAdminCount( Whisper ? User : string( ), m_GHost->m_DB->ThreadedAdminCount( m_Server ) ) );
       } else {
         QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
@@ -1409,20 +1437,28 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !DBSTATUS
     //
     else if ( Command == "dbstatus" ) {
-      QueueChatCommand( m_GHost->m_DB->GetStatus( ), User, Whisper );
+      if ( HasAccess( ACCESS_CRITICAL ) ) {
+        QueueChatCommand( m_GHost->m_DB->GetStatus( ), User, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !DELBAN
     // !UNBAN
     //
     else if ( ( Command == "delban" || Command == "unban" ) && !Payload.empty( ) ) {
-      m_PairedBanRemoves.push_back( PairedBanRemove( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanRemove( Payload, "" ) ) );
+      if ( HasAccess( ACCESS_UNBAN ) ) {
+        m_PairedBanRemoves.push_back( PairedBanRemove( Whisper ? User : string( ), m_GHost->m_DB->ThreadedBanRemove( Payload, "" ) ) );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !DELADMIN
     //
     else if ( Command == "deladmin" && !Payload.empty( ) ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_MANAGEMENT ) ) {
         if ( !IsAdmin( Payload ) ) {
           QueueChatCommand( m_GHost->m_Language->UserIsNotAnAdmin( m_Server, Payload ), User, Whisper );
         } else {
@@ -1436,7 +1472,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !DISABLE
     //
     else if ( Command == "disable" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_CRITICAL ) ) {
         QueueChatCommand( m_GHost->m_Language->BotDisabled( ), User, Whisper );
         m_GHost->m_Enabled = false;
       } else {
@@ -1447,7 +1483,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !ENABLE
     //
     else if ( Command == "enable" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_CRITICAL ) ) {
         QueueChatCommand( m_GHost->m_Language->BotEnabled( ), User, Whisper );
         m_GHost->m_Enabled = true;
       } else {
@@ -1459,37 +1495,48 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     //
     else if ( Command == "enforcesg" && !Payload.empty( ) ) {
       // only load files in the current directory just to be safe
-
-      if ( Payload.find( "/" ) != string :: npos || Payload.find( "\\" ) != string :: npos ) {
-        QueueChatCommand( m_GHost->m_Language->UnableToLoadReplaysOutside( ), User, Whisper );
-      } else {
-        string File = m_GHost->m_ReplayPath + Payload + ".w3g";
-
-        if ( UTIL_FileExists( File ) ) {
-          QueueChatCommand( m_GHost->m_Language->LoadingReplay( File ), User, Whisper );
-          CReplay *Replay = new CReplay( );
-          Replay->Load( File, false );
-          Replay->ParseReplay( false );
-          m_GHost->m_EnforcePlayers = Replay->GetPlayers( );
-          delete Replay;
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        if ( Payload.find( "/" ) != string :: npos || Payload.find( "\\" ) != string :: npos ) {
+          QueueChatCommand( m_GHost->m_Language->UnableToLoadReplaysOutside( ), User, Whisper );
         } else {
-          QueueChatCommand( m_GHost->m_Language->UnableToLoadReplayDoesntExist( File ), User, Whisper );
+          string File = m_GHost->m_ReplayPath + Payload + ".w3g";
+
+          if ( UTIL_FileExists( File ) ) {
+            QueueChatCommand( m_GHost->m_Language->LoadingReplay( File ), User, Whisper );
+            CReplay *Replay = new CReplay( );
+            Replay->Load( File, false );
+            Replay->ParseReplay( false );
+            m_GHost->m_EnforcePlayers = Replay->GetPlayers( );
+            delete Replay;
+          } else {
+            QueueChatCommand( m_GHost->m_Language->UnableToLoadReplayDoesntExist( File ), User, Whisper );
+          }
         }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !GETCLAN
     //
     else if ( Command == "getclan" ) {
-      SendGetClanList( );
-      QueueChatCommand( m_GHost->m_Language->UpdatingClanList( ), User, Whisper );
+      if ( HasAccess( ACCESS_SETTINGS ) ) {
+        SendGetClanList( );
+        QueueChatCommand( m_GHost->m_Language->UpdatingClanList( ), User, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !GETFRIENDS
     //
     else if ( Command == "getfriends" ) {
-      SendGetFriendsList( );
-      QueueChatCommand( m_GHost->m_Language->UpdatingFriendsList( ), User, Whisper );
+      if ( HasAccess( ACCESS_SETTINGS ) ) {
+        SendGetFriendsList( );
+        QueueChatCommand( m_GHost->m_Language->UpdatingFriendsList( ), User, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !GETGAME
@@ -1525,281 +1572,315 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !HOSTSG
     //
     else if ( Command == "hostsg" && !Payload.empty( ) ) {
-      m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, true, Payload, User, User, m_Server, Whisper );
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, true, Payload, User, User, m_Server, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !LOAD (load config file)
     //
     else if ( Command == "load" ) {
-      if ( Payload.empty( ) ) {
-        QueueChatCommand( m_GHost->m_Language->CurrentlyLoadedMapCFGIs( m_GHost->m_Map->GetCFGFile( ) ), User, Whisper );
-      } else {
-        string FoundMapConfigs;
+      if ( HasAccess( ACCESS_MAP ) ) {
+        if ( Payload.empty( ) ) {
+          QueueChatCommand( m_GHost->m_Language->CurrentlyLoadedMapCFGIs( m_GHost->m_Map->GetCFGFile( ) ), User, Whisper );
+        } else {
+          string FoundMapConfigs;
 
-        try
-        {
-          path MapCFGPath( m_GHost->m_MapCFGPath );
-          string Pattern = Payload;
-          transform( Pattern.begin( ), Pattern.end( ), Pattern.begin( ), (int (*)(int))tolower );
+          try
+          {
+            path MapCFGPath( m_GHost->m_MapCFGPath );
+            string Pattern = Payload;
+            transform( Pattern.begin( ), Pattern.end( ), Pattern.begin( ), (int (*)(int))tolower );
 
-          if ( !exists( MapCFGPath ) ) {
-            CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing map configs - map config path doesn't exist" );
-            QueueChatCommand( m_GHost->m_Language->ErrorListingMapConfigs( ), User, Whisper );
-          } else {
-            directory_iterator EndIterator;
-            path LastMatch;
-            uint32_t Matches = 0;
+            if ( !exists( MapCFGPath ) ) {
+              CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing map configs - map config path doesn't exist" );
+              QueueChatCommand( m_GHost->m_Language->ErrorListingMapConfigs( ), User, Whisper );
+            } else {
+              directory_iterator EndIterator;
+              path LastMatch;
+              uint32_t Matches = 0;
 
-            for ( directory_iterator i( MapCFGPath ); i != EndIterator; ++i ) {
-              string FileName = i->path( ).filename( ).string( );
-              string Stem = i->path( ).stem( ).string( );
-              transform( FileName.begin( ), FileName.end( ), FileName.begin( ), (int (*)(int))tolower );
-              transform( Stem.begin( ), Stem.end( ), Stem.begin( ), (int (*)(int))tolower );
+              for ( directory_iterator i( MapCFGPath ); i != EndIterator; ++i ) {
+                string FileName = i->path( ).filename( ).string( );
+                string Stem = i->path( ).stem( ).string( );
+                transform( FileName.begin( ), FileName.end( ), FileName.begin( ), (int (*)(int))tolower );
+                transform( Stem.begin( ), Stem.end( ), Stem.begin( ), (int (*)(int))tolower );
 
-              if ( !is_directory( i->status( ) ) && i->path( ).extension( ) == ".cfg" && FileName.find( Pattern ) != string :: npos ) {
-                LastMatch = i->path( );
-                ++Matches;
+                if ( !is_directory( i->status( ) ) && i->path( ).extension( ) == ".cfg" && FileName.find( Pattern ) != string :: npos ) {
+                  LastMatch = i->path( );
+                  ++Matches;
 
-                if ( FoundMapConfigs.empty( ) ) {
-                  FoundMapConfigs = i->path( ).filename( ).string( );
-                } else {
-                  FoundMapConfigs += ", " + i->path( ).filename( ).string( );
-                }
+                  if ( FoundMapConfigs.empty( ) ) {
+                    FoundMapConfigs = i->path( ).filename( ).string( );
+                  } else {
+                    FoundMapConfigs += ", " + i->path( ).filename( ).string( );
+                  }
 
-                // if the pattern matches the filename exactly, with or without extension, stop any further matching
+                  // if the pattern matches the filename exactly, with or without extension, stop any further matching
 
-                if ( FileName == Pattern || Stem == Pattern ) {
-                  Matches = 1;
-                  break;
+                  if ( FileName == Pattern || Stem == Pattern ) {
+                    Matches = 1;
+                    break;
+                  }
                 }
               }
-            }
 
-            if ( Matches == 0 ) {
-              QueueChatCommand( m_GHost->m_Language->NoMapConfigsFound( ), User, Whisper );
-            } else if ( Matches == 1 ) {
-              string File = LastMatch.filename( ).string( );
-              QueueChatCommand( m_GHost->m_Language->LoadingConfigFile( m_GHost->m_MapCFGPath + File ), User, Whisper );
-              CConfig MapCFG;
-              MapCFG.Read( LastMatch.string( ) );
-              m_GHost->m_Map->Load( &MapCFG, m_GHost->m_MapCFGPath + File );
-            } else {
-              QueueChatCommand( m_GHost->m_Language->FoundMapConfigs( FoundMapConfigs ), User, Whisper );
+              if ( Matches == 0 ) {
+                QueueChatCommand( m_GHost->m_Language->NoMapConfigsFound( ), User, Whisper );
+              } else if ( Matches == 1 ) {
+                string File = LastMatch.filename( ).string( );
+                QueueChatCommand( m_GHost->m_Language->LoadingConfigFile( m_GHost->m_MapCFGPath + File ), User, Whisper );
+                CConfig MapCFG;
+                MapCFG.Read( LastMatch.string( ) );
+                m_GHost->m_Map->Load( &MapCFG, m_GHost->m_MapCFGPath + File );
+              } else {
+                QueueChatCommand( m_GHost->m_Language->FoundMapConfigs( FoundMapConfigs ), User, Whisper );
+              }
             }
           }
+          catch ( const exception &ex )
+          {
+            CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing map configs - caught exception [" + ex.what( ) + "]" );
+            QueueChatCommand( m_GHost->m_Language->ErrorListingMapConfigs( ), User, Whisper );
+          }
         }
-        catch ( const exception &ex )
-        {
-          CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing map configs - caught exception [" + ex.what( ) + "]" );
-          QueueChatCommand( m_GHost->m_Language->ErrorListingMapConfigs( ), User, Whisper );
-        }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !LOADSG
     //
     else if ( Command == "loadsg" && !Payload.empty( ) ) {
-      // only load files in the current directory just to be safe
-
-      if ( Payload.find( "/" ) != string :: npos || Payload.find( "\\" ) != string :: npos ) {
-        QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGamesOutside( ), User, Whisper );
-      } else {
-        string File = m_GHost->m_SaveGamePath + Payload + ".w3z";
-        string FileNoPath = Payload + ".w3z";
-
-        if ( UTIL_FileExists( File ) ) {
-          if ( m_GHost->m_CurrentGame ) {
-            QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGameGameInLobby( ), User, Whisper );
-          } else {
-            QueueChatCommand( m_GHost->m_Language->LoadingSaveGame( File ), User, Whisper );
-            m_GHost->m_SaveGame->Load( File, false );
-            m_GHost->m_SaveGame->ParseSaveGame( );
-            m_GHost->m_SaveGame->SetFileName( File );
-            m_GHost->m_SaveGame->SetFileNameNoPath( FileNoPath );
-          }
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        // only load files in the current directory just to be safe
+        if ( Payload.find( "/" ) != string :: npos || Payload.find( "\\" ) != string :: npos ) {
+          QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGamesOutside( ), User, Whisper );
         } else {
-          QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGameDoesntExist( File ), User, Whisper );
+          string File = m_GHost->m_SaveGamePath + Payload + ".w3z";
+          string FileNoPath = Payload + ".w3z";
+
+          if ( UTIL_FileExists( File ) ) {
+            if ( m_GHost->m_CurrentGame ) {
+              QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGameGameInLobby( ), User, Whisper );
+            } else {
+              QueueChatCommand( m_GHost->m_Language->LoadingSaveGame( File ), User, Whisper );
+              m_GHost->m_SaveGame->Load( File, false );
+              m_GHost->m_SaveGame->ParseSaveGame( );
+              m_GHost->m_SaveGame->SetFileName( File );
+              m_GHost->m_SaveGame->SetFileNameNoPath( FileNoPath );
+            }
+          } else {
+            QueueChatCommand( m_GHost->m_Language->UnableToLoadSaveGameDoesntExist( File ), User, Whisper );
+          }
         }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !MAP (load map file)
     //
     else if ( Command == "map" ) {
-      if ( Payload.empty( ) ) {
-        QueueChatCommand( m_GHost->m_Language->CurrentlyLoadedMapCFGIs( m_GHost->m_Map->GetCFGFile( ) ), User, Whisper );
-      } else {
-        string FoundMaps;
+      if ( HasAccess( ACCESS_MAP ) ) {
+        if ( Payload.empty( ) ) {
+          QueueChatCommand( m_GHost->m_Language->CurrentlyLoadedMapCFGIs( m_GHost->m_Map->GetCFGFile( ) ), User, Whisper );
+        } else {
+          string FoundMaps;
 
-        try
-        {
-          path MapPath( m_GHost->m_MapPath );
-          string Pattern = Payload;
-          transform( Pattern.begin( ), Pattern.end( ), Pattern.begin( ), (int (*)(int))tolower );
+          try
+          {
+            path MapPath( m_GHost->m_MapPath );
+            string Pattern = Payload;
+            transform( Pattern.begin( ), Pattern.end( ), Pattern.begin( ), (int (*)(int))tolower );
 
-          if ( !exists( MapPath ) ) {
-            CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing maps - map path doesn't exist" );
-            QueueChatCommand( m_GHost->m_Language->ErrorListingMaps( ), User, Whisper );
-          } else {
-            directory_iterator EndIterator;
-            path LastMatch;
-            uint32_t Matches = 0;
+            if ( !exists( MapPath ) ) {
+              CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing maps - map path doesn't exist" );
+              QueueChatCommand( m_GHost->m_Language->ErrorListingMaps( ), User, Whisper );
+            } else {
+              directory_iterator EndIterator;
+              path LastMatch;
+              uint32_t Matches = 0;
 
-            for ( directory_iterator i( MapPath ); i != EndIterator; ++i ) {
-              string FileName = i->path( ).filename( ).string( );
-              string Stem = i->path( ).stem( ).string( );
-              transform( FileName.begin( ), FileName.end( ), FileName.begin( ), (int (*)(int))tolower );
-              transform( Stem.begin( ), Stem.end( ), Stem.begin( ), (int (*)(int))tolower );
+              for ( directory_iterator i( MapPath ); i != EndIterator; ++i ) {
+                string FileName = i->path( ).filename( ).string( );
+                string Stem = i->path( ).stem( ).string( );
+                transform( FileName.begin( ), FileName.end( ), FileName.begin( ), (int (*)(int))tolower );
+                transform( Stem.begin( ), Stem.end( ), Stem.begin( ), (int (*)(int))tolower );
 
-              if ( !is_directory( i->status( ) ) && FileName.find( Pattern ) != string :: npos ) {
-                LastMatch = i->path( );
-                ++Matches;
+                if ( !is_directory( i->status( ) ) && FileName.find( Pattern ) != string :: npos ) {
+                  LastMatch = i->path( );
+                  ++Matches;
 
-                if ( FoundMaps.empty( ) ) {
-                  FoundMaps = i->path( ).filename( ).string( );
-                } else {
-                  FoundMaps += ", " + i->path( ).filename( ).string( );
-                }
+                  if ( FoundMaps.empty( ) ) {
+                    FoundMaps = i->path( ).filename( ).string( );
+                  } else {
+                    FoundMaps += ", " + i->path( ).filename( ).string( );
+                  }
 
-                // if the pattern matches the filename exactly, with or without extension, stop any further matching
+                  // if the pattern matches the filename exactly, with or without extension, stop any further matching
 
-                if ( FileName == Pattern || Stem == Pattern ) {
-                  Matches = 1;
-                  break;
+                  if ( FileName == Pattern || Stem == Pattern ) {
+                    Matches = 1;
+                    break;
+                  }
                 }
               }
-            }
 
-            if ( Matches == 0 ) {
-              QueueChatCommand( m_GHost->m_Language->NoMapsFound( ), User, Whisper );
-            } else if ( Matches == 1 ) {
-              string File = LastMatch.filename( ).string( );
-              QueueChatCommand( m_GHost->m_Language->LoadingConfigFile( File ), User, Whisper );
+              if ( Matches == 0 ) {
+                QueueChatCommand( m_GHost->m_Language->NoMapsFound( ), User, Whisper );
+              } else if ( Matches == 1 ) {
+                string File = LastMatch.filename( ).string( );
+                QueueChatCommand( m_GHost->m_Language->LoadingConfigFile( File ), User, Whisper );
 
-              // hackhack: create a config file in memory with the required information to load the map
+                // hackhack: create a config file in memory with the required information to load the map
 
-              CConfig MapCFG;
-              MapCFG.Set( "map_path", "Maps\\Download\\" + File );
-              MapCFG.Set( "map_localpath", File );
-              m_GHost->m_Map->Load( &MapCFG, File );
-            } else {
-              QueueChatCommand( m_GHost->m_Language->FoundMaps( FoundMaps ), User, Whisper );
+                CConfig MapCFG;
+                MapCFG.Set( "map_path", "Maps\\Download\\" + File );
+                MapCFG.Set( "map_localpath", File );
+                m_GHost->m_Map->Load( &MapCFG, File );
+              } else {
+                QueueChatCommand( m_GHost->m_Language->FoundMaps( FoundMaps ), User, Whisper );
+              }
             }
           }
+          catch ( const exception &ex )
+          {
+            CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing maps - caught exception [" + ex.what( ) + "]" );
+            QueueChatCommand( m_GHost->m_Language->ErrorListingMaps( ), User, Whisper );
+          }
         }
-        catch ( const exception &ex )
-        {
-          CONSOLE_Print( "[BNET: " + m_ServerAlias + "] error listing maps - caught exception [" + ex.what( ) + "]" );
-          QueueChatCommand( m_GHost->m_Language->ErrorListingMaps( ), User, Whisper );
-        }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !PRIV (host private game)
     //
     else if ( Command == "priv" && !Payload.empty( ) ) {
-      m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, false, Payload, User, User, m_Server, Whisper );
+      if ( HasAccess( ACCESS_HOST ) ) {
+        m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, false, Payload, User, User, m_Server, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !PRIVBY (host private game by other player)
     //
     else if ( Command == "privby" && !Payload.empty( ) ) {
-      // extract the owner and the game name
-      // e.g. "Varlock dota 6.54b arem ~~~" -> owner: "Varlock", game name: "dota 6.54b arem ~~~"
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        // extract the owner and the game name
+        // e.g. "Varlock dota 6.54b arem ~~~" -> owner: "Varlock", game name: "dota 6.54b arem ~~~"
+        string Owner;
+        string GameName;
+        string :: size_type GameNameStart = Payload.find( " " );
 
-      string Owner;
-      string GameName;
-      string :: size_type GameNameStart = Payload.find( " " );
-
-      if ( GameNameStart != string :: npos ) {
-        Owner = Payload.substr( 0, GameNameStart );
-        GameName = Payload.substr( GameNameStart + 1 );
-        m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, false, GameName, Owner, User, m_Server, Whisper );
+        if ( GameNameStart != string :: npos ) {
+          Owner = Payload.substr( 0, GameNameStart );
+          GameName = Payload.substr( GameNameStart + 1 );
+          m_GHost->CreateGame( m_GHost->m_Map, GAME_PRIVATE, false, GameName, Owner, User, m_Server, Whisper );
+        }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !PUB (host public game)
     //
     else if ( Command == "pub" && !Payload.empty( ) ) {
-      m_GHost->CreateGame( m_GHost->m_Map, GAME_PUBLIC, false, Payload, User, User, m_Server, Whisper );
+      if ( HasAccess( ACCESS_HOST ) ) {
+        m_GHost->CreateGame( m_GHost->m_Map, GAME_PUBLIC, false, Payload, User, User, m_Server, Whisper );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !PUBBY (host public game by other player)
     //
     else if ( Command == "pubby" && !Payload.empty( ) ) {
-      // extract the owner and the game name
-      // e.g. "Varlock dota 6.54b arem ~~~" -> owner: "Varlock", game name: "dota 6.54b arem ~~~"
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        // extract the owner and the game name
+        // e.g. "Varlock dota 6.54b arem ~~~" -> owner: "Varlock", game name: "dota 6.54b arem ~~~"
 
-      string Owner;
-      string GameName;
-      string :: size_type GameNameStart = Payload.find( " " );
+        string Owner;
+        string GameName;
+        string :: size_type GameNameStart = Payload.find( " " );
 
-      if ( GameNameStart != string :: npos ) {
-        Owner = Payload.substr( 0, GameNameStart );
-        GameName = Payload.substr( GameNameStart + 1 );
-        m_GHost->CreateGame( m_GHost->m_Map, GAME_PUBLIC, false, GameName, Owner, User, m_Server, Whisper );
+        if ( GameNameStart != string :: npos ) {
+          Owner = Payload.substr( 0, GameNameStart );
+          GameName = Payload.substr( GameNameStart + 1 );
+          m_GHost->CreateGame( m_GHost->m_Map, GAME_PUBLIC, false, GameName, Owner, User, m_Server, Whisper );
+        }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !MB (host public/private game with set map/config and by other player)
     //
     else if ( Command == "mb" && !Payload.empty( ) ) {
-      string GameType;
-      string MapType;
-      string Map;
-      string Owner;
-      string GameName;
+      if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+        string GameType;
+        string MapType;
+        string Map;
+        string Owner;
+        string GameName;
 
-      stringstream SS;
-      SS << Payload;
-      SS >> GameType;
+        stringstream SS;
+        SS << Payload;
+        SS >> GameType;
 
-      if ( ( GameType == "u" || GameType == "r" ) && !SS.eof( ) ) {
-        if ( GameType == "u" ) {
-          GameType = "pubby";
-        } else {
-          GameType = "privby";
-        }
-
-        SS >> MapType;
-
-        if ( ( MapType == "m" || MapType == "l" ) && !SS.eof( ) ) {
-          if ( MapType == "m" ) {
-            MapType = "map";
+        if ( ( GameType == "u" || GameType == "r" ) && !SS.eof( ) ) {
+          if ( GameType == "u" ) {
+            GameType = "pubby";
           } else {
-            MapType = "load";
+            GameType = "privby";
           }
 
-          SS >> Map;
+          SS >> MapType;
 
-          //change pipes in map to spaces
-          // this is done to avoid problems with map and then gamename
-          UTIL_Replace( Map, "|", " " );
+          if ( ( MapType == "m" || MapType == "l" ) && !SS.eof( ) ) {
+            if ( MapType == "m" ) {
+              MapType = "map";
+            } else {
+              MapType = "load";
+            }
 
-          if ( !SS.eof( ) ) {
-            SS >> Owner;
+            SS >> Map;
+
+            //change pipes in map to spaces
+            // this is done to avoid problems with map and then gamename
+            UTIL_Replace( Map, "|", " " );
 
             if ( !SS.eof( ) ) {
-              getline( SS, GameName );
-              string :: size_type Start = GameName.find_first_not_of( " " );
+              SS >> Owner;
 
-              if ( Start != string :: npos ) {
-                GameName = GameName.substr( Start );
+              if ( !SS.eof( ) ) {
+                getline( SS, GameName );
+                string :: size_type Start = GameName.find_first_not_of( " " );
+
+                if ( Start != string :: npos ) {
+                  GameName = GameName.substr( Start );
+                }
+
+                //execute secondary commands
+                BotCommand( m_CommandTrigger + MapType + " " + Map, User, Whisper, ForceRoot );
+                BotCommand( m_CommandTrigger + GameType + " " + Owner + " " + GameName, User, Whisper, ForceRoot );
               }
-
-              //execute secondary commands
-              BotCommand( m_CommandTrigger + MapType + " " + Map, User, Whisper, ForceRoot );
-              BotCommand( m_CommandTrigger + GameType + " " + Owner + " " + GameName, User, Whisper, ForceRoot );
             }
           }
         }
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
     //
     // !RELOAD
     //
     else if ( Command == "reload" ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_SETTINGS ) ) {
         QueueChatCommand( m_GHost->m_Language->ReloadingConfigurationFiles( ), User, Whisper );
         m_GHost->ReloadConfigs( );
       } else {
@@ -1810,13 +1891,17 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !SAY
     //
     else if ( Command == "say" && !Payload.empty( ) ) {
-      QueueChatCommand( Payload );
+      if ( HasAccess( ACCESS_SAY ) ) {
+        QueueChatCommand( Payload );
+      } else {
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
+      }
     }
     //
     // !SAYGAMES
     //
     else if ( Command == "saygames" && !Payload.empty( ) ) {
-      if ( IsRootAdmin( User ) || ForceRoot ) {
+      if ( HasAccess( ACCESS_SAY ) ) {
         boost::mutex::scoped_lock lock( m_GHost->m_GamesMutex );
 
         if ( m_GHost->m_CurrentGame ) {
@@ -1843,15 +1928,15 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
       boost::mutex::scoped_lock lock( m_GHost->m_GamesMutex );
 
       if ( m_GHost->m_CurrentGame ) {
-        if ( m_GHost->m_CurrentGame->GetCountDownStarted( ) ) {
-          QueueChatCommand( m_GHost->m_Language->UnableToUnhostGameCountdownStarted( m_GHost->m_CurrentGame->GetDescription( ) ), User, Whisper );
-        }
-        // if the game owner is still in the game only allow the root admin to unhost the game
-        else if ( m_GHost->m_CurrentGame->GetPlayerFromName( m_GHost->m_CurrentGame->GetOwnerName( ), false ) && !IsRootAdmin( User ) && !ForceRoot ) {
-          QueueChatCommand( m_GHost->m_Language->CantUnhostGameOwnerIsPresent( m_GHost->m_CurrentGame->GetOwnerName( ) ), User, Whisper );
+        if ( HasAccess( ACCESS_CONTROL ) || User == m_GHost->m_CurrentGame->GetOwnerName( ) ) {
+          if ( m_GHost->m_CurrentGame->GetCountDownStarted( ) ) {
+            QueueChatCommand( m_GHost->m_Language->UnableToUnhostGameCountdownStarted( m_GHost->m_CurrentGame->GetDescription( ) ), User, Whisper );
+          } else {
+            QueueChatCommand( m_GHost->m_Language->UnhostingGame( m_GHost->m_CurrentGame->GetDescription( ) ), User, Whisper );
+            m_GHost->m_CurrentGame->SetExiting( true );
+          }
         } else {
-          QueueChatCommand( m_GHost->m_Language->UnhostingGame( m_GHost->m_CurrentGame->GetDescription( ) ), User, Whisper );
-          m_GHost->m_CurrentGame->SetExiting( true );
+          QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
         }
       } else {
         QueueChatCommand( m_GHost->m_Language->UnableToUnhostGameNoGameInLobby( ), User, Whisper );
@@ -1863,10 +1948,14 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     // !WARDENSTATUS
     //
     else if ( Command == "wardenstatus" ) {
-      if ( m_BNLSClient ) {
-        QueueChatCommand( "WARDEN STATUS --- " + UTIL_ToString( m_BNLSClient->GetTotalWardenIn( ) ) + " requests received, " + UTIL_ToString( m_BNLSClient->GetTotalWardenOut( ) ) + " responses sent.", User, Whisper );
+      if ( HasAccess( ACCESS_CRITICAL ) ) {
+        if ( m_BNLSClient ) {
+          QueueChatCommand( "WARDEN STATUS --- " + UTIL_ToString( m_BNLSClient->GetTotalWardenIn( ) ) + " requests received, " + UTIL_ToString( m_BNLSClient->GetTotalWardenOut( ) ) + " responses sent.", User, Whisper );
+        } else {
+          QueueChatCommand( "WARDEN STATUS --- Not connected to BNLS server.", User, Whisper );
+        }
       } else {
-        QueueChatCommand( "WARDEN STATUS --- Not connected to BNLS server.", User, Whisper );
+        QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
   } else {
@@ -1882,7 +1971,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
   // in some cases the queue may be full of legitimate messages but we don't really care if the bot ignores one of these commands once in awhile
   // e.g. when several users join a game at the same time and cause multiple /whois messages to be queued at once
 
-  if ( IsAdmin( User ) || IsRootAdmin( User ) || ( m_PublicCommands && m_OutPackets.size( ) <= 3 ) ) {
+  if ( AdminAccess.any() || ( m_PublicCommands && m_OutPackets.size( ) <= 3 ) ) {
     //
     // !STATS
     //
@@ -2267,14 +2356,13 @@ void CBNET :: UnqueueGameRefreshes( )
 bool CBNET :: IsAdmin( string name )
 {
   transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
+  return m_Admins.count(name);
+}
 
-  for ( vector<string> :: iterator i = m_Admins.begin( ); i != m_Admins.end( ); ++i ) {
-    if ( *i == name ) {
-      return true;
-    }
-  }
-
-  return false;
+bitset<16> CBNET :: GetAccess( string name )
+{
+  transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
+  return m_Admins[name];
 }
 
 bool CBNET :: IsRootAdmin( string name )
@@ -2302,23 +2390,16 @@ bool CBNET :: IsRootAdmin( string name )
   return false;
 }
 
-void CBNET :: AddAdmin( string name )
+void CBNET :: AddAdmin( string name, bitset<16> access )
 {
   transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
-  m_Admins.push_back( name );
+  m_Admins[name] = access;
 }
 
 void CBNET :: RemoveAdmin( string name )
 {
   transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
-
-  for ( vector<string> :: iterator i = m_Admins.begin( ); i != m_Admins.end( ); ) {
-    if ( *i == name ) {
-      i = m_Admins.erase( i );
-    } else {
-      ++i;
-    }
-  }
+  m_Admins.erase(name);
 }
 
 void CBNET :: HoldFriends( CBaseGame *game )

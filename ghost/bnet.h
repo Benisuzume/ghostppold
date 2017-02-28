@@ -87,7 +87,7 @@ vector<PairedGPSCheck> m_PairedGPSChecks;       // vector of paired threaded dat
 vector<PairedDPSCheck> m_PairedDPSChecks;       // vector of paired threaded database DotA player summary checks in progress
 vector<PairedVPSCheck> m_PairedVPSChecks;       // vector of paired threaded database vamp player summary checks in progress
 CCallableAdminList *m_CallableAdminList;        // threaded database admin list in progress
-vector<string> m_Admins;                        // vector of cached admins
+map<string, bitset<16> > m_Admins;                   // map of cached admins to access level
 bool m_Exiting;                                 // set to true and this class will be deleted next update
 string m_Server;                                // battle.net server to connect to
 string m_ServerIP;                              // battle.net server to connect to (the IP address so we don't have to resolve it every time we connect)
@@ -265,8 +265,9 @@ void UnqueueGameRefreshes( );
 // other functions
 
 bool IsAdmin( string name );
+bitset<16> GetAccess( string name );
 bool IsRootAdmin( string name );
-void AddAdmin( string name );
+void AddAdmin( string name, bitset<16> access );
 void RemoveAdmin( string name );
 void HoldFriends( CBaseGame *game );
 void HoldClan( CBaseGame *game );

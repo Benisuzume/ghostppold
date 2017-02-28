@@ -184,7 +184,7 @@ CCallableAdminCheck *CGHostDBMySQL :: ThreadedAdminCheck( string server, string 
   return Callable;
 }
 
-CCallableAdminAdd *CGHostDBMySQL :: ThreadedAdminAdd( string server, string user )
+CCallableAdminAdd *CGHostDBMySQL :: ThreadedAdminAdd( string server, string user, uint16_t access )
 {
   void *Connection = GetIdleConnection( );
 
@@ -192,7 +192,7 @@ CCallableAdminAdd *CGHostDBMySQL :: ThreadedAdminAdd( string server, string user
     ++m_NumConnections;
   }
 
-  CCallableAdminAdd *Callable = new CMySQLCallableAdminAdd( server, user, Connection, m_BotID, m_Server, m_Database, m_User, m_Password, m_Port, this );
+  CCallableAdminAdd *Callable = new CMySQLCallableAdminAdd( server, user, access, Connection, m_BotID, m_Server, m_Database, m_User, m_Password, m_Port, this );
   CreateThread( Callable );
   ++m_OutstandingCallables;
   return Callable;
@@ -771,13 +771,13 @@ bool MySQLAdminCheck( void *conn, string *error, uint32_t botid, string server, 
   return IsAdmin;
 }
 
-bool MySQLAdminAdd( void *conn, string *error, uint32_t botid, string server, string user )
+bool MySQLAdminAdd( void *conn, string *error, uint32_t botid, string server, string user, uint16_t access )
 {
   transform( user.begin( ), user.end( ), user.begin( ), (int (*)(int))tolower );
   string EscServer = MySQLEscapeString( conn, server );
   string EscUser = MySQLEscapeString( conn, user );
   bool Success = false;
-  string Query = "INSERT INTO admins ( botid, server, name ) VALUES ( " + UTIL_ToString( botid ) + ", '" + EscServer + "', '" + EscUser + "' )";
+  string Query = "INSERT INTO admins ( botid, server, name, access ) VALUES ( " + UTIL_ToString( botid ) + ", '" + EscServer + "', '" + EscUser + "', '" + UTIL_ToString( access ) + "'  )";
 
   if ( mysql_real_query( (MYSQL*)conn, Query.c_str( ), Query.size( ) ) != 0 ) {
     *error = mysql_error( (MYSQL*)conn );
@@ -805,12 +805,12 @@ bool MySQLAdminRemove( void *conn, string *error, uint32_t botid, string server,
   return Success;
 }
 
-vector<string> MySQLAdminList( void *conn, string *error, uint32_t botid, string server )
+map<string, bitset<16> > MySQLAdminList( void *conn, string *error, uint32_t botid, string server )
 {
   string EscServer = MySQLEscapeString( conn, server );
 
-  vector<string> AdminList;
-  string Query = "SELECT name FROM admins WHERE server='" + EscServer + "'";
+  map<string, bitset<16> > AdminList;
+  string Query = "SELECT name, access FROM admins WHERE server='" + EscServer + "'";
 
   if ( mysql_real_query( (MYSQL*)conn, Query.c_str( ), Query.size( ) ) != 0 ) {
     *error = mysql_error( (MYSQL*)conn );
@@ -820,8 +820,8 @@ vector<string> MySQLAdminList( void *conn, string *error, uint32_t botid, string
     if ( Result ) {
       vector<string> Row = MySQLFetchRow( Result );
 
-      while ( !Row.empty( ) ) {
-        AdminList.push_back( Row[0] );
+      while ( Row.size( ) == 2 ) {
+        AdminList[Row[0]] = bitset<16>(UTIL_ToUInt16(Row[1]));
         Row = MySQLFetchRow( Result );
       }
 
@@ -2298,7 +2298,7 @@ void CMySQLCallableAdminAdd :: operator()( )
   Init( );
 
   if ( m_Error.empty( ) ) {
-    m_Result = MySQLAdminAdd( m_Connection, &m_Error, m_SQLBotID, m_Server, m_User );
+    m_Result = MySQLAdminAdd( m_Connection, &m_Error, m_SQLBotID, m_Server, m_User, m_Access );
   }
 
   Close( );

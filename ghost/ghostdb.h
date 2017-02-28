@@ -112,9 +112,9 @@ virtual bool Begin( );
 virtual bool Commit( );
 virtual uint32_t AdminCount( string server );
 virtual bool AdminCheck( string server, string user );
-virtual bool AdminAdd( string server, string user );
+virtual bool AdminAdd( string server, string user, uint16_t access );
 virtual bool AdminRemove( string server, string user );
-virtual vector<string> AdminList( string server );
+virtual map<string, bitset<16> > AdminList( string server );
 virtual uint32_t BanCount( string server );
 virtual CDBBan *BanCheck( string server, string user, string ip, string hostname, string ownername );
 virtual uint32_t BanAdd( string server, string user, string ip, string gamename, string admin, string reason, uint32_t expiretime, string context );
@@ -150,7 +150,7 @@ virtual bool W3MMDVarAdd( uint32_t gameid, map<VarP, string> var_strings, string
 virtual void CreateThread( CBaseCallable *callable );
 virtual CCallableAdminCount *ThreadedAdminCount( string server );
 virtual CCallableAdminCheck *ThreadedAdminCheck( string server, string user );
-virtual CCallableAdminAdd *ThreadedAdminAdd( string server, string user );
+virtual CCallableAdminAdd *ThreadedAdminAdd( string server, string user, uint16_t access );
 virtual CCallableAdminRemove *ThreadedAdminRemove( string server, string user );
 virtual CCallableAdminList *ThreadedAdminList( string server );
 virtual CCallableBanCount *ThreadedBanCount( string server );
@@ -312,10 +312,11 @@ class CCallableAdminAdd : virtual public CBaseCallable
 protected:
 string m_Server;
 string m_User;
+uint16_t m_Access;
 bool m_Result;
 
 public:
-CCallableAdminAdd( string nServer, string nUser ) : CBaseCallable( ), m_Server( nServer ), m_User( nUser ), m_Result( false )
+CCallableAdminAdd( string nServer, string nUser, uint16_t nAccess ) : CBaseCallable( ), m_Server( nServer ), m_User( nUser ), m_Access( nAccess ), m_Result( false )
 {
 }
 virtual ~CCallableAdminAdd( );
@@ -327,6 +328,10 @@ virtual string GetServer( )
 virtual string GetUser( )
 {
   return m_User;
+}
+virtual uint16_t GetAccess( )
+{
+  return m_Access;
 }
 virtual bool GetResult( )
 {
@@ -373,7 +378,7 @@ class CCallableAdminList : virtual public CBaseCallable
 {
 protected:
 string m_Server;
-vector<string> m_Result;
+map<string, bitset<16> > m_Result;
 
 public:
 CCallableAdminList( string nServer ) : CBaseCallable( ), m_Server( nServer )
@@ -381,11 +386,11 @@ CCallableAdminList( string nServer ) : CBaseCallable( ), m_Server( nServer )
 }
 virtual ~CCallableAdminList( );
 
-virtual vector<string> GetResult( )
+virtual map<string, bitset<16> > GetResult( )
 {
   return m_Result;
 }
-virtual void SetResult( vector<string> nResult )
+virtual void SetResult( map<string, bitset<16> > nResult )
 {
   m_Result = nResult;
 }

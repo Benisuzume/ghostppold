@@ -197,7 +197,7 @@ virtual void RecoverCallable( CBaseCallable *callable );
 virtual void CreateThread( CBaseCallable *callable );
 virtual CCallableAdminCount *ThreadedAdminCount( string server );
 virtual CCallableAdminCheck *ThreadedAdminCheck( string server, string user );
-virtual CCallableAdminAdd *ThreadedAdminAdd( string server, string user );
+virtual CCallableAdminAdd *ThreadedAdminAdd( string server, string user, uint16_t access );
 virtual CCallableAdminRemove *ThreadedAdminRemove( string server, string user );
 virtual CCallableAdminList *ThreadedAdminList( string server );
 virtual CCallableBanCount *ThreadedBanCount( string server );
@@ -243,9 +243,9 @@ virtual void *GetIdleConnection( );
 
 uint32_t MySQLAdminCount( void *conn, string *error, uint32_t botid, string server );
 bool MySQLAdminCheck( void *conn, string *error, uint32_t botid, string server, string user );
-bool MySQLAdminAdd( void *conn, string *error, uint32_t botid, string server, string user );
+bool MySQLAdminAdd( void *conn, string *error, uint32_t botid, string server, string user, uint16_t access );
 bool MySQLAdminRemove( void *conn, string *error, uint32_t botid, string server, string user );
-vector<string> MySQLAdminList( void *conn, string *error, uint32_t botid, string server );
+map<string, bitset<16> > MySQLAdminList( void *conn, string *error, uint32_t botid, string server );
 uint32_t MySQLBanCount( void *conn, string *error, uint32_t botid, string server );
 CDBBan *MySQLBanCheck( void *conn, string *error, uint32_t botid, string server, string user, string ip, string hostname, string ownername );
 uint32_t MySQLBanAdd( void *conn, string *error, uint32_t botid, string server, string user, string ip, string gamename, string admin, string reason, uint32_t expiretime, string context );
@@ -356,7 +356,7 @@ virtual void Close( )
 class CMySQLCallableAdminAdd : public CCallableAdminAdd, public CMySQLCallable
 {
 public:
-CMySQLCallableAdminAdd( string nServer, string nUser, void *nConnection, uint32_t nSQLBotID, string nSQLServer, string nSQLDatabase, string nSQLUser, string nSQLPassword, uint16_t nSQLPort, CGHostDBMySQL *nDB ) : CBaseCallable( ), CCallableAdminAdd( nServer, nUser ), CMySQLCallable( nConnection, nSQLBotID, nSQLServer, nSQLDatabase, nSQLUser, nSQLPassword, nSQLPort, nDB )
+CMySQLCallableAdminAdd( string nServer, string nUser, uint16_t nAccess, void *nConnection, uint32_t nSQLBotID, string nSQLServer, string nSQLDatabase, string nSQLUser, string nSQLPassword, uint16_t nSQLPort, CGHostDBMySQL *nDB ) : CBaseCallable( ), CCallableAdminAdd( nServer, nUser, nAccess ), CMySQLCallable( nConnection, nSQLBotID, nSQLServer, nSQLDatabase, nSQLUser, nSQLPassword, nSQLPort, nDB )
 {
 }
 virtual ~CMySQLCallableAdminAdd( )

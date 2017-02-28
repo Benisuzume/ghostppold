@@ -71,7 +71,7 @@ bool CGHostDB :: AdminCheck( string server, string user )
   return false;
 }
 
-bool CGHostDB :: AdminAdd( string server, string user )
+bool CGHostDB :: AdminAdd( string server, string user, uint16_t access )
 {
   return false;
 }
@@ -81,9 +81,9 @@ bool CGHostDB :: AdminRemove( string server, string user )
   return false;
 }
 
-vector<string> CGHostDB :: AdminList( string server )
+map<string, bitset<16> > CGHostDB :: AdminList( string server )
 {
-  return vector<string>( );
+  return map<string, bitset<16> >( );
 }
 
 uint32_t CGHostDB :: BanCount( string server )
@@ -246,7 +246,7 @@ CCallableAdminCheck *CGHostDB :: ThreadedAdminCheck( string server, string user 
   return NULL;
 }
 
-CCallableAdminAdd *CGHostDB :: ThreadedAdminAdd( string server, string user )
+CCallableAdminAdd *CGHostDB :: ThreadedAdminAdd( string server, string user, uint16_t access )
 {
   return NULL;
 }

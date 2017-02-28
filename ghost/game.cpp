@@ -854,15 +854,6 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   string Command = command;
   string Payload = payload;
 
-  bool AdminCheck = false;
-
-  for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-    if ( ( (*i)->GetServer( ) == player->GetSpoofedRealm( ) || ( (*i)->GetServer( ) == "Garena" && player->GetSpoofedRealm( ).empty( ) && player->GetSpoofed( ) ) ) && (*i)->IsAdmin( User ) ) {
-      AdminCheck = true;
-      break;
-    }
-  }
-
   bool RootAdminCheck = false;
 
   for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
@@ -872,10 +863,29 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     }
   }
 
-  if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+  bitset<16> AdminAccess = bitset<16>((unsigned short int) 0);
+
+  // Lazy approach, but it saves a function declaration and lots of scope meddling for, essentially, abstraction
+  #define HasAccess( position ) AdminAccess.test( position )
+
+  if ( RootAdminCheck ) {
+    AdminAccess.reset();
+    AdminAccess.flip();
+  } else {
+    for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+      if ( ( (*i)->GetServer( ) == player->GetSpoofedRealm( ) || ( (*i)->GetServer( ) == "Garena" && player->GetSpoofedRealm( ).empty( ) && player->GetSpoofed( ) ) ) && (*i)->IsAdmin( User ) ) {
+        if ((*i)->IsAdmin( User )) {
+          AdminAccess = (*i)->GetAccess( User );
+          break;
+        }
+      }
+    }
+  }
+
+  if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
     CONSOLE_Print( "[GAME: " + m_GameName + "] admin [" + User + "] sent command [" + Command + "] with payload [" + Payload + "]" );
 
-    if ( !m_Locked || RootAdminCheck || IsOwner( User ) ) {
+    if ( !m_Locked || RootAdminCheck || IsOwner( User ) || ( m_Locked && HasAccess( ACCESS_LOCK ) && Command == "UNLOCK" ) ) {
       /*****************
        * ADMIN COMMANDS *
        ******************/
@@ -886,10 +896,13 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       //
 
       // we use "!a" as an alias for abort because you don't have much time to abort the countdown so it's useful for the abort command to be easy to type
-
       if ( ( Command == "abort" || Command == "a" ) && m_CountDownStarted && !m_GameLoading && !m_GameLoaded ) {
-        SendAllChat( m_GHost->m_Language->CountDownAborted( ) );
-        m_CountDownStarted = false;
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          SendAllChat( m_GHost->m_Language->CountDownAborted( ) );
+          m_CountDownStarted = false;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !ADDBAN
@@ -905,7 +918,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
 
         string userContext = User;
 
-        if ( AdminCheck || RootAdminCheck ) {
+        if ( HasAccess( ACCESS_BAN ) ) {
           userContext = "";
         } else {
           BanDuration = 3600 * m_GHost->m_PBanDuration; //!pban for non-admins to non give unexpected results
@@ -979,34 +992,36 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !ANNOUNCE
       //
       else if ( Command == "announce" && !m_CountDownStarted ) {
-        if ( Payload.empty( ) || Payload == "off" ) {
-          SendAllChat( m_GHost->m_Language->AnnounceMessageDisabled( ) );
-          SetAnnounce( 0, string( ) );
-        } else {
-          // extract the interval and the message
-          // e.g. "30 hello everyone" -> interval: "30", message: "hello everyone"
-
-          uint32_t Interval;
-          string Message;
-          stringstream SS;
-          SS << Payload;
-          SS >> Interval;
-
-          if ( SS.fail( ) || Interval == 0 ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to announce command" );
+        if ( HasAccess( ACCESS_MANAGEMENT ) ) {
+          if ( Payload.empty( ) || Payload == "off" ) {
+            SendAllChat( m_GHost->m_Language->AnnounceMessageDisabled( ) );
+            SetAnnounce( 0, string( ) );
           } else {
-            if ( SS.eof( ) ) {
-              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to announce command" );
+            // extract the interval and the message
+            // e.g. "30 hello everyone" -> interval: "30", message: "hello everyone"
+
+            uint32_t Interval;
+            string Message;
+            stringstream SS;
+            SS << Payload;
+            SS >> Interval;
+
+            if ( SS.fail( ) || Interval == 0 ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to announce command" );
             } else {
-              getline( SS, Message );
-              string :: size_type Start = Message.find_first_not_of( " " );
+              if ( SS.eof( ) ) {
+                CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to announce command" );
+              } else {
+                getline( SS, Message );
+                string :: size_type Start = Message.find_first_not_of( " " );
 
-              if ( Start != string :: npos ) {
-                Message = Message.substr( Start );
+                if ( Start != string :: npos ) {
+                  Message = Message.substr( Start );
+                }
+
+                SendAllChat( m_GHost->m_Language->AnnounceMessageEnabled( ) );
+                SetAnnounce( Interval, Message );
               }
-
-              SendAllChat( m_GHost->m_Language->AnnounceMessageEnabled( ) );
-              SetAnnounce( Interval, Message );
             }
           }
         }
@@ -1015,16 +1030,20 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !AUTOSTART
       //
       else if ( Command == "autostart" && !m_CountDownStarted ) {
-        if ( Payload.empty( ) || Payload == "off" ) {
-          SendAllChat( m_GHost->m_Language->AutoStartDisabled( ) );
-          m_AutoStartPlayers = 0;
-        } else {
-          uint32_t AutoStartPlayers = UTIL_ToUInt32( Payload );
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          if ( Payload.empty( ) || Payload == "off" ) {
+            SendAllChat( m_GHost->m_Language->AutoStartDisabled( ) );
+            m_AutoStartPlayers = 0;
+          } else {
+            uint32_t AutoStartPlayers = UTIL_ToUInt32( Payload );
 
-          if ( AutoStartPlayers != 0 ) {
-            SendAllChat( m_GHost->m_Language->AutoStartEnabled( UTIL_ToString( AutoStartPlayers ) ) );
-            m_AutoStartPlayers = AutoStartPlayers;
+            if ( AutoStartPlayers != 0 ) {
+              SendAllChat( m_GHost->m_Language->AutoStartEnabled( UTIL_ToString( AutoStartPlayers ) ) );
+              m_AutoStartPlayers = AutoStartPlayers;
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
@@ -1032,7 +1051,10 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       //
       else if ( Command == "banlast" && m_GameLoaded && !m_GHost->m_BNETs.empty( ) && m_DBBanLast ) {
         string userContext = User;
-        if ( AdminCheck || RootAdminCheck ) userContext = "";
+
+        if ( HasAccess( ACCESS_BAN ) ) {
+          userContext = "";
+        }
 
         m_PairedBanAdds.push_back( PairedBanAdd( User, m_GHost->m_DB->ThreadedBanAdd( m_DBBanLast->GetServer( ), m_DBBanLast->GetName( ), m_DBBanLast->GetIP( ), m_GameName, User, Payload, 3600 * 48, userContext ) ) );
       }
@@ -1040,273 +1062,317 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !CHECK
       //
       else if ( Command == "check" ) {
-        if ( !Payload.empty( ) ) {
-          CGamePlayer *LastMatch = NULL;
-          uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          if ( !Payload.empty( ) ) {
+            CGamePlayer *LastMatch = NULL;
+            uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
-          if ( Matches == 0 ) {
-            SendAllChat( m_GHost->m_Language->UnableToCheckPlayerNoMatchesFound( Payload ) );
-          } else if ( Matches == 1 ) {
-            bool LastMatchAdminCheck = false;
+            if ( Matches == 0 ) {
+              SendAllChat( m_GHost->m_Language->UnableToCheckPlayerNoMatchesFound( Payload ) );
+            } else if ( Matches == 1 ) {
+              bool LastMatchAdminAccess = false;
 
-            for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-              if ( (*i)->GetServer( ) == LastMatch->GetSpoofedRealm( ) && (*i)->IsAdmin( LastMatch->GetName( ) ) ) {
-                LastMatchAdminCheck = true;
-                break;
+              for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+                if ( (*i)->GetServer( ) == LastMatch->GetSpoofedRealm( ) && (*i)->IsAdmin( LastMatch->GetName( ) ) ) {
+                  LastMatchAdminAccess = true;
+                  break;
+                }
               }
-            }
 
-            bool LastMatchRootAdminCheck = false;
+              bool LastMatchRootAdminCheck = false;
 
-            for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-              if ( (*i)->GetServer( ) == LastMatch->GetSpoofedRealm( ) && (*i)->IsRootAdmin( LastMatch->GetName( ) ) ) {
-                LastMatchRootAdminCheck = true;
-                break;
+              for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+                if ( (*i)->GetServer( ) == LastMatch->GetSpoofedRealm( ) && (*i)->IsRootAdmin( LastMatch->GetName( ) ) ) {
+                  LastMatchRootAdminCheck = true;
+                  break;
+                }
               }
-            }
 
-            SendAllChat( m_GHost->m_Language->CheckedPlayer( LastMatch->GetName( ), LastMatch->GetNumPings( ) > 0 ? UTIL_ToString( LastMatch->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( LastMatch->GetExternalIPString( ) ), LastMatchAdminCheck || LastMatchRootAdminCheck ? "Yes" : "No", IsOwner( LastMatch->GetName( ) ) ? "Yes" : "No", LastMatch->GetSpoofed( ) ? "Yes" : "No", LastMatch->GetSpoofedRealm( ).empty( ) ? "Garena" : LastMatch->GetSpoofedRealm( ), LastMatch->GetReserved( ) ? "Yes" : "No" ) );
+              SendAllChat( m_GHost->m_Language->CheckedPlayer( LastMatch->GetName( ), LastMatch->GetNumPings( ) > 0 ? UTIL_ToString( LastMatch->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( LastMatch->GetExternalIPString( ) ), LastMatchAdminAccess || LastMatchRootAdminCheck ? "Yes" : "No", IsOwner( LastMatch->GetName( ) ) ? "Yes" : "No", LastMatch->GetSpoofed( ) ? "Yes" : "No", LastMatch->GetSpoofedRealm( ).empty( ) ? "Garena" : LastMatch->GetSpoofedRealm( ), LastMatch->GetReserved( ) ? "Yes" : "No" ) );
+            } else {
+              SendAllChat( m_GHost->m_Language->UnableToCheckPlayerFoundMoreThanOneMatch( Payload ) );
+            }
           } else {
-            SendAllChat( m_GHost->m_Language->UnableToCheckPlayerFoundMoreThanOneMatch( Payload ) );
+            SendAllChat( m_GHost->m_Language->CheckedPlayer( User, player->GetNumPings( ) > 0 ? UTIL_ToString( player->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( player->GetExternalIPString( ) ), AdminAccess.any() ? "Yes" : "No", IsOwner( User ) ? "Yes" : "No", player->GetSpoofed( ) ? "Yes" : "No", player->GetSpoofedRealm( ).empty( ) ? "Garena" : player->GetSpoofedRealm( ), player->GetReserved( ) ? "Yes" : "No" ) );
           }
         } else {
-          SendAllChat( m_GHost->m_Language->CheckedPlayer( User, player->GetNumPings( ) > 0 ? UTIL_ToString( player->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( player->GetExternalIPString( ) ), AdminCheck || RootAdminCheck ? "Yes" : "No", IsOwner( User ) ? "Yes" : "No", player->GetSpoofed( ) ? "Yes" : "No", player->GetSpoofedRealm( ).empty( ) ? "Garena" : player->GetSpoofedRealm( ), player->GetReserved( ) ? "Yes" : "No" ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !CHECKBAN
       //
-      else if ( Command == "checkban" && !Payload.empty( ) && !m_GHost->m_BNETs.empty( ) && ( AdminCheck || RootAdminCheck ) ) {
-        for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-          m_PairedBanChecks.push_back( PairedBanCheck( User, m_GHost->m_DB->ThreadedBanCheck( (*i)->GetServer( ), Payload, string( ), string( ), string( ) ) ) );
+      else if ( Command == "checkban" && !Payload.empty( ) && !m_GHost->m_BNETs.empty( ) ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+            m_PairedBanChecks.push_back( PairedBanCheck( User, m_GHost->m_DB->ThreadedBanCheck( (*i)->GetServer( ), Payload, string( ), string( ), string( ) ) ) );
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !CLEARHCL
       //
       else if ( Command == "clearhcl" && !m_CountDownStarted ) {
-        m_HCLCommandString.clear( );
-        SendAllChat( m_GHost->m_Language->ClearingHCL( ) );
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          m_HCLCommandString.clear( );
+          SendAllChat( m_GHost->m_Language->ClearingHCL( ) );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !CLOSE (close slot)
       //
       else if ( Command == "close" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded ) {
-        // close as many slots as specified, e.g. "5 10" closes slots 5 and 10
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // close as many slots as specified, e.g. "5 10" closes slots 5 and 10
 
-        stringstream SS;
-        SS << Payload;
+          stringstream SS;
+          SS << Payload;
 
-        while ( !SS.eof( ) ) {
-          uint32_t SID;
-          SS >> SID;
+          while ( !SS.eof( ) ) {
+            uint32_t SID;
+            SS >> SID;
 
-          if ( SS.fail( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to close command" );
-            break;
-          } else {
-            CloseSlot( (unsigned char)( SID - 1 ), true );
+            if ( SS.fail( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to close command" );
+              break;
+            } else {
+              CloseSlot( (unsigned char)( SID - 1 ), true );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !CLOSEALL
       //
       else if ( Command == "closeall" && !m_GameLoading && !m_GameLoaded ) {
-        CloseAllSlots( );
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          CloseAllSlots( );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !COMP (computer slot)
       //
       else if ( Command == "comp" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded && !m_SaveGame ) {
-        // extract the slot and the skill
-        // e.g. "1 2" -> slot: "1", skill: "2"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // extract the slot and the skill
+          // e.g. "1 2" -> slot: "1", skill: "2"
 
-        uint32_t Slot;
-        uint32_t Skill = 1;
-        stringstream SS;
-        SS << Payload;
-        SS >> Slot;
-
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comp command" );
-        } else {
-          if ( !SS.eof( ) ) {
-            SS >> Skill;
-          }
+          uint32_t Slot;
+          uint32_t Skill = 1;
+          stringstream SS;
+          SS << Payload;
+          SS >> Slot;
 
           if ( SS.fail( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to comp command" );
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comp command" );
           } else {
-            ComputerSlot( (unsigned char)( Slot - 1 ), (unsigned char)Skill, true );
+            if ( !SS.eof( ) ) {
+              SS >> Skill;
+            }
+
+            if ( SS.fail( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to comp command" );
+            } else {
+              ComputerSlot( (unsigned char)( Slot - 1 ), (unsigned char)Skill, true );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !COMPCOLOUR (computer colour change)
       //
       else if ( Command == "compcolour" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded && !m_SaveGame ) {
-        // extract the slot and the colour
-        // e.g. "1 2" -> slot: "1", colour: "2"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // extract the slot and the colour
+          // e.g. "1 2" -> slot: "1", colour: "2"
 
-        uint32_t Slot;
-        uint32_t Colour;
-        stringstream SS;
-        SS << Payload;
-        SS >> Slot;
+          uint32_t Slot;
+          uint32_t Colour;
+          stringstream SS;
+          SS << Payload;
+          SS >> Slot;
 
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to compcolour command" );
-        } else {
-          if ( SS.eof( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to compcolour command" );
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to compcolour command" );
           } else {
-            SS >> Colour;
-
-            if ( SS.fail( ) ) {
-              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to compcolour command" );
+            if ( SS.eof( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to compcolour command" );
             } else {
-              unsigned char SID = (unsigned char)( Slot - 1 );
+              SS >> Colour;
 
-              if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && Colour < 12 && SID < m_Slots.size( ) ) {
-                if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
-                  ColourSlot( SID, Colour );
+              if ( SS.fail( ) ) {
+                CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to compcolour command" );
+              } else {
+                unsigned char SID = (unsigned char)( Slot - 1 );
+
+                if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && Colour < 12 && SID < m_Slots.size( ) ) {
+                  if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
+                    ColourSlot( SID, Colour );
+                  }
                 }
               }
             }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !COMPHANDICAP (computer handicap change)
       //
       else if ( Command == "comphandicap" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded && !m_SaveGame ) {
-        // extract the slot and the handicap
-        // e.g. "1 50" -> slot: "1", handicap: "50"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // extract the slot and the handicap
+          // e.g. "1 50" -> slot: "1", handicap: "50"
 
-        uint32_t Slot;
-        uint32_t Handicap;
-        stringstream SS;
-        SS << Payload;
-        SS >> Slot;
+          uint32_t Slot;
+          uint32_t Handicap;
+          stringstream SS;
+          SS << Payload;
+          SS >> Slot;
 
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comphandicap command" );
-        } else {
-          if ( SS.eof( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to comphandicap command" );
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comphandicap command" );
           } else {
-            SS >> Handicap;
-
-            if ( SS.fail( ) ) {
-              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to comphandicap command" );
+            if ( SS.eof( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to comphandicap command" );
             } else {
-              unsigned char SID = (unsigned char)( Slot - 1 );
+              SS >> Handicap;
 
-              if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && ( Handicap == 50 || Handicap == 60 || Handicap == 70 || Handicap == 80 || Handicap == 90 || Handicap == 100 ) && SID < m_Slots.size( ) ) {
-                if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
-                  m_Slots[SID].SetHandicap( (unsigned char)Handicap );
-                  SendAllSlotInfo( );
+              if ( SS.fail( ) ) {
+                CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to comphandicap command" );
+              } else {
+                unsigned char SID = (unsigned char)( Slot - 1 );
+
+                if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && ( Handicap == 50 || Handicap == 60 || Handicap == 70 || Handicap == 80 || Handicap == 90 || Handicap == 100 ) && SID < m_Slots.size( ) ) {
+                  if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
+                    m_Slots[SID].SetHandicap( (unsigned char)Handicap );
+                    SendAllSlotInfo( );
+                  }
                 }
               }
             }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !COMPRACE (computer race change)
       //
       else if ( Command == "comprace" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded && !m_SaveGame ) {
-        // extract the slot and the race
-        // e.g. "1 human" -> slot: "1", race: "human"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // extract the slot and the race
+          // e.g. "1 human" -> slot: "1", race: "human"
 
-        uint32_t Slot;
-        string Race;
-        stringstream SS;
-        SS << Payload;
-        SS >> Slot;
+          uint32_t Slot;
+          string Race;
+          stringstream SS;
+          SS << Payload;
+          SS >> Slot;
 
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comprace command" );
-        } else {
-          if ( SS.eof( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to comprace command" );
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to comprace command" );
           } else {
-            getline( SS, Race );
-            string :: size_type Start = Race.find_first_not_of( " " );
+            if ( SS.eof( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to comprace command" );
+            } else {
+              getline( SS, Race );
+              string :: size_type Start = Race.find_first_not_of( " " );
 
-            if ( Start != string :: npos ) {
-              Race = Race.substr( Start );
-            }
+              if ( Start != string :: npos ) {
+                Race = Race.substr( Start );
+              }
 
-            transform( Race.begin( ), Race.end( ), Race.begin( ), (int (*)(int))tolower );
-            unsigned char SID = (unsigned char)( Slot - 1 );
+              transform( Race.begin( ), Race.end( ), Race.begin( ), (int (*)(int))tolower );
+              unsigned char SID = (unsigned char)( Slot - 1 );
 
-            if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && !( m_Map->GetMapFlags( ) & MAPFLAG_RANDOMRACES ) && SID < m_Slots.size( ) ) {
-              if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
-                if ( Race == "human" ) {
-                  m_Slots[SID].SetRace( SLOTRACE_HUMAN | SLOTRACE_SELECTABLE );
-                  SendAllSlotInfo( );
-                } else if ( Race == "orc" ) {
-                  m_Slots[SID].SetRace( SLOTRACE_ORC | SLOTRACE_SELECTABLE );
-                  SendAllSlotInfo( );
-                } else if ( Race == "night elf" ) {
-                  m_Slots[SID].SetRace( SLOTRACE_NIGHTELF | SLOTRACE_SELECTABLE );
-                  SendAllSlotInfo( );
-                } else if ( Race == "undead" ) {
-                  m_Slots[SID].SetRace( SLOTRACE_UNDEAD | SLOTRACE_SELECTABLE );
-                  SendAllSlotInfo( );
-                } else if ( Race == "random" ) {
-                  m_Slots[SID].SetRace( SLOTRACE_RANDOM | SLOTRACE_SELECTABLE );
-                  SendAllSlotInfo( );
-                } else {
-                  CONSOLE_Print( "[GAME: " + m_GameName + "] unknown race [" + Race + "] sent to comprace command" );
+              if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && !( m_Map->GetMapFlags( ) & MAPFLAG_RANDOMRACES ) && SID < m_Slots.size( ) ) {
+                if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
+                  if ( Race == "human" ) {
+                    m_Slots[SID].SetRace( SLOTRACE_HUMAN | SLOTRACE_SELECTABLE );
+                    SendAllSlotInfo( );
+                  } else if ( Race == "orc" ) {
+                    m_Slots[SID].SetRace( SLOTRACE_ORC | SLOTRACE_SELECTABLE );
+                    SendAllSlotInfo( );
+                  } else if ( Race == "night elf" ) {
+                    m_Slots[SID].SetRace( SLOTRACE_NIGHTELF | SLOTRACE_SELECTABLE );
+                    SendAllSlotInfo( );
+                  } else if ( Race == "undead" ) {
+                    m_Slots[SID].SetRace( SLOTRACE_UNDEAD | SLOTRACE_SELECTABLE );
+                    SendAllSlotInfo( );
+                  } else if ( Race == "random" ) {
+                    m_Slots[SID].SetRace( SLOTRACE_RANDOM | SLOTRACE_SELECTABLE );
+                    SendAllSlotInfo( );
+                  } else {
+                    CONSOLE_Print( "[GAME: " + m_GameName + "] unknown race [" + Race + "] sent to comprace command" );
+                  }
                 }
               }
             }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !COMPTEAM (computer team change)
       //
       else if ( Command == "compteam" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded && !m_SaveGame ) {
-        // extract the slot and the team
-        // e.g. "1 2" -> slot: "1", team: "2"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // extract the slot and the team
+          // e.g. "1 2" -> slot: "1", team: "2"
 
-        uint32_t Slot;
-        uint32_t Team;
-        stringstream SS;
-        SS << Payload;
-        SS >> Slot;
+          uint32_t Slot;
+          uint32_t Team;
+          stringstream SS;
+          SS << Payload;
+          SS >> Slot;
 
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to compteam command" );
-        } else {
-          if ( SS.eof( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to compteam command" );
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to compteam command" );
           } else {
-            SS >> Team;
-
-            if ( SS.fail( ) ) {
-              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to compteam command" );
+            if ( SS.eof( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to compteam command" );
             } else {
-              unsigned char SID = (unsigned char)( Slot - 1 );
+              SS >> Team;
 
-              if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && Team < 12 && SID < m_Slots.size( ) ) {
-                if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
-                  m_Slots[SID].SetTeam( (unsigned char)( Team - 1 ) );
-                  SendAllSlotInfo( );
+              if ( SS.fail( ) ) {
+                CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to compteam command" );
+              } else {
+                unsigned char SID = (unsigned char)( Slot - 1 );
+
+                if ( !( m_Map->GetMapOptions( ) & MAPOPT_FIXEDPLAYERSETTINGS ) && Team < 12 && SID < m_Slots.size( ) ) {
+                  if ( m_Slots[SID].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[SID].GetComputer( ) == 1 ) {
+                    m_Slots[SID].SetTeam( (unsigned char)( Team - 1 ) );
+                    SendAllSlotInfo( );
+                  }
                 }
               }
             }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !DBSTATUS
       //
-      else if ( Command == "dbstatus" && ( AdminCheck || RootAdminCheck ) ) {
+      else if ( Command == "dbstatus" ) {
+        if ( HasAccess( ACCESS_CRITICAL ) ) {
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
         SendAllChat( m_GHost->m_DB->GetStatus( ) );
       }
       //
@@ -1314,233 +1380,289 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !DL
       //
       else if ( ( Command == "download" || Command == "dl" || Command == "downloads" ) && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded ) {
-        if ( Payload == "off" || Payload == "0" ) {
-          m_AllowDownloads = false;
-        } else if ( Payload == "on" || Payload == "1" ) {
-          m_AllowDownloads = true;
-        } else {
-          CGamePlayer *LastMatch = NULL;
-          uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
-
-          if ( Matches == 0 ) {
-            SendAllChat( m_GHost->m_Language->UnableToStartDownloadNoMatchesFound( Payload ) );
-          } else if ( Matches == 1 ) {
-            if ( !LastMatch->GetDownloadStarted( ) && !LastMatch->GetDownloadFinished( ) ) {
-              unsigned char SID = GetSIDFromPID( LastMatch->GetPID( ) );
-
-              if ( SID < m_Slots.size( ) && m_Slots[SID].GetDownloadStatus( ) != 100 ) {
-                // inform the client that we are willing to send the map
-
-                CONSOLE_Print( "[GAME: " + m_GameName + "] map download started for player [" + LastMatch->GetName( ) + "]" );
-                Send( LastMatch, m_Protocol->SEND_W3GS_STARTDOWNLOAD( GetHostPID( ) ) );
-                LastMatch->SetDownloadAllowed( true );
-                LastMatch->SetDownloadStarted( true );
-                LastMatch->SetStartedDownloadingTicks( GetTicks( ) );
-              }
-            }
+        if ( HasAccess( ACCESS_SETTINGS ) ) {
+          if ( Payload == "off" || Payload == "0" ) {
+            m_AllowDownloads = false;
+          } else if ( Payload == "on" || Payload == "1" ) {
+            m_AllowDownloads = true;
           } else {
-            SendAllChat( m_GHost->m_Language->UnableToStartDownloadFoundMoreThanOneMatch( Payload ) );
+            CGamePlayer *LastMatch = NULL;
+            uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+
+            if ( Matches == 0 ) {
+              SendAllChat( m_GHost->m_Language->UnableToStartDownloadNoMatchesFound( Payload ) );
+            } else if ( Matches == 1 ) {
+              if ( !LastMatch->GetDownloadStarted( ) && !LastMatch->GetDownloadFinished( ) ) {
+                unsigned char SID = GetSIDFromPID( LastMatch->GetPID( ) );
+
+                if ( SID < m_Slots.size( ) && m_Slots[SID].GetDownloadStatus( ) != 100 ) {
+                  // inform the client that we are willing to send the map
+
+                  CONSOLE_Print( "[GAME: " + m_GameName + "] map download started for player [" + LastMatch->GetName( ) + "]" );
+                  Send( LastMatch, m_Protocol->SEND_W3GS_STARTDOWNLOAD( GetHostPID( ) ) );
+                  LastMatch->SetDownloadAllowed( true );
+                  LastMatch->SetDownloadStarted( true );
+                  LastMatch->SetStartedDownloadingTicks( GetTicks( ) );
+                }
+              }
+            } else {
+              SendAllChat( m_GHost->m_Language->UnableToStartDownloadFoundMoreThanOneMatch( Payload ) );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !DROP
       //
-      else if ( Command == "drop" && m_GameLoaded && ( AdminCheck || RootAdminCheck ) ) {
-        StopLaggers( "lagged out (dropped by admin)" );
+      else if ( Command == "drop" && m_GameLoaded ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_KICK ) ) {
+          StopLaggers( "lagged out (dropped by admin)" );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !END
       //
-      else if ( Command == "end" && m_GameLoaded && ( AdminCheck || RootAdminCheck ) ) {
-        CONSOLE_Print( "[GAME: " + m_GameName + "] is over (admin ended game)" );
-        StopPlayers( "was disconnected (admin ended game)" );
+      else if ( Command == "end" && m_GameLoaded ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          CONSOLE_Print( "[GAME: " + m_GameName + "] is over (admin ended game)" );
+          StopPlayers( "was disconnected (admin ended game)" );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !FAKEPLAYER
       //
       else if ( Command == "fakeplayer" && !m_CountDownStarted ) {
-        if ( m_FakePlayers.empty( ) || Payload == "add" ) {
-          CreateFakePlayer( );
+        if ( HasAccess( ACCESS_CONTROL ) ) {
+          if ( m_FakePlayers.empty( ) || Payload == "add" ) {
+            CreateFakePlayer( );
+          } else {
+            DeleteFakePlayer( );
+          }
         } else {
-          DeleteFakePlayer( );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !FPPAUSE
       //
-      else if ( Command == "fppause" && !m_FakePlayers.empty( ) && m_GameLoaded && ( AdminCheck || RootAdminCheck ) ) {
-        BYTEARRAY CRC;
-        BYTEARRAY Action;
-        Action.push_back( 1 );
-        m_Actions.push( new CIncomingAction( m_FakePlayers[0].pid, CRC, Action ) );
+      else if ( Command == "fppause" && !m_FakePlayers.empty( ) && m_GameLoaded ) {
+        if ( HasAccess( ACCESS_CONTROL ) ) {
+          BYTEARRAY CRC;
+          BYTEARRAY Action;
+          Action.push_back( 1 );
+          m_Actions.push( new CIncomingAction( m_FakePlayers[0].pid, CRC, Action ) );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !FPRESUME
       //
-      else if ( Command == "fpresume" && !m_FakePlayers.empty( ) && m_GameLoaded && ( AdminCheck || RootAdminCheck ) ) {
-        BYTEARRAY CRC;
-        BYTEARRAY Action;
-        Action.push_back( 2 );
-        m_Actions.push( new CIncomingAction( m_FakePlayers[0].pid, CRC, Action ) );
+      else if ( Command == "fpresume" && !m_FakePlayers.empty( ) && m_GameLoaded ) {
+        if ( HasAccess( ACCESS_CONTROL ) ) {
+          BYTEARRAY CRC;
+          BYTEARRAY Action;
+          Action.push_back( 2 );
+          m_Actions.push( new CIncomingAction( m_FakePlayers[0].pid, CRC, Action ) );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !FROM
       //
       else if ( Command == "from" ) {
-        string Froms;
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          string Froms;
 
-        for ( vector<CGamePlayer *> :: iterator i = m_Players.begin( ); i != m_Players.end( ); ++i ) {
-          // we reverse the byte order on the IP because it's stored in network byte order
+          for ( vector<CGamePlayer *> :: iterator i = m_Players.begin( ); i != m_Players.end( ); ++i ) {
+            // we reverse the byte order on the IP because it's stored in network byte order
 
-          Froms += (*i)->GetNameTerminated( );
-          Froms += ": (";
-          Froms += m_GHost->FromCheck( (*i)->GetExternalIPString( ) );
-          Froms += ")";
+            Froms += (*i)->GetNameTerminated( );
+            Froms += ": (";
+            Froms += m_GHost->FromCheck( (*i)->GetExternalIPString( ) );
+            Froms += ")";
 
-          if ( i != m_Players.end( ) - 1 ) {
-            Froms += ", ";
+            if ( i != m_Players.end( ) - 1 ) {
+              Froms += ", ";
+            }
+
+            if ( ( m_GameLoading || m_GameLoaded ) && Froms.size( ) > 100 ) {
+              // cut the text into multiple lines ingame
+
+              SendAllChat( Froms );
+              Froms.clear( );
+            }
           }
 
-          if ( ( m_GameLoading || m_GameLoaded ) && Froms.size( ) > 100 ) {
-            // cut the text into multiple lines ingame
-
+          if ( !Froms.empty( ) ) {
             SendAllChat( Froms );
-            Froms.clear( );
           }
-        }
-
-        if ( !Froms.empty( ) ) {
-          SendAllChat( Froms );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !HCL
       //
       else if ( Command == "hcl" && !m_CountDownStarted ) {
-        if ( !Payload.empty( ) ) {
-          if ( Payload.size( ) <= m_Slots.size( ) ) {
-            string HCLChars = "abcdefghijklmnopqrstuvwxyz0123456789 -=,.";
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          if ( !Payload.empty( ) ) {
+            if ( Payload.size( ) <= m_Slots.size( ) ) {
+              string HCLChars = "abcdefghijklmnopqrstuvwxyz0123456789 -=,.";
 
-            if ( Payload.find_first_not_of( HCLChars ) == string :: npos ) {
-              m_HCLCommandString = Payload;
-              SendAllChat( m_GHost->m_Language->SettingHCL( m_HCLCommandString ) );
+              if ( Payload.find_first_not_of( HCLChars ) == string :: npos ) {
+                m_HCLCommandString = Payload;
+                SendAllChat( m_GHost->m_Language->SettingHCL( m_HCLCommandString ) );
+              } else {
+                SendAllChat( m_GHost->m_Language->UnableToSetHCLInvalid( ) );
+              }
             } else {
-              SendAllChat( m_GHost->m_Language->UnableToSetHCLInvalid( ) );
+              SendAllChat( m_GHost->m_Language->UnableToSetHCLTooLong( ) );
             }
           } else {
-            SendAllChat( m_GHost->m_Language->UnableToSetHCLTooLong( ) );
+            SendAllChat( m_GHost->m_Language->TheHCLIs( m_HCLCommandString ) );
           }
         } else {
-          SendAllChat( m_GHost->m_Language->TheHCLIs( m_HCLCommandString ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !HOLD (hold a slot for someone)
       //
       else if ( Command == "hold" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded ) {
-        // hold as many players as specified, e.g. "Varlock Kilranin" holds players "Varlock" and "Kilranin"
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // hold as many players as specified, e.g. "Varlock Kilranin" holds players "Varlock" and "Kilranin"
 
-        stringstream SS;
-        SS << Payload;
+          stringstream SS;
+          SS << Payload;
 
-        while ( !SS.eof( ) ) {
-          string HoldName;
-          SS >> HoldName;
+          while ( !SS.eof( ) ) {
+            string HoldName;
+            SS >> HoldName;
 
-          if ( SS.fail( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to hold command" );
-            break;
-          } else {
-            SendAllChat( m_GHost->m_Language->AddedPlayerToTheHoldList( HoldName ) );
-            AddToReserved( HoldName );
+            if ( SS.fail( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to hold command" );
+              break;
+            } else {
+              SendAllChat( m_GHost->m_Language->AddedPlayerToTheHoldList( HoldName ) );
+              AddToReserved( HoldName );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !KICK (kick a player)
       //
       else if ( Command == "kick" && !Payload.empty( ) ) {
-        if ( AdminCheck || RootAdminCheck || !m_GameLoaded ) {
-          CGamePlayer *LastMatch = NULL;
-          uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+        if ( IsOwner( User ) || HasAccess( ACCESS_KICK ) ) {
+          if ( !m_GameLoaded ) {
+            CGamePlayer *LastMatch = NULL;
+            uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
-          if ( Matches == 0 ) {
-            SendAllChat( m_GHost->m_Language->UnableToKickNoMatchesFound( Payload ) );
-          } else if ( Matches == 1 ) {
-            LastMatch->SetDeleteMe( true );
-            LastMatch->SetLeftReason( m_GHost->m_Language->WasKickedByPlayer( User ) );
-            m_GHost->DenyIP( LastMatch->GetExternalIPString( ), 60000, "was kicked by !kick" );
+            if ( Matches == 0 ) {
+              SendAllChat( m_GHost->m_Language->UnableToKickNoMatchesFound( Payload ) );
+            } else if ( Matches == 1 ) {
+              LastMatch->SetDeleteMe( true );
+              LastMatch->SetLeftReason( m_GHost->m_Language->WasKickedByPlayer( User ) );
+              m_GHost->DenyIP( LastMatch->GetExternalIPString( ), 60000, "was kicked by !kick" );
 
-            if ( !m_GameLoading && !m_GameLoaded ) {
-              LastMatch->SetLeftCode( PLAYERLEAVE_LOBBY );
+              if ( !m_GameLoading && !m_GameLoaded ) {
+                LastMatch->SetLeftCode( PLAYERLEAVE_LOBBY );
+              } else {
+                LastMatch->SetLeftCode( PLAYERLEAVE_LOST );
+              }
+
+              if ( !m_GameLoading && !m_GameLoaded ) {
+                OpenSlot( GetSIDFromPID( LastMatch->GetPID( ) ), false );
+              }
             } else {
-              LastMatch->SetLeftCode( PLAYERLEAVE_LOST );
-            }
-
-            if ( !m_GameLoading && !m_GameLoaded ) {
-              OpenSlot( GetSIDFromPID( LastMatch->GetPID( ) ), false );
+              SendAllChat( m_GHost->m_Language->UnableToKickFoundMoreThanOneMatch( Payload ) );
             }
           } else {
-            SendAllChat( m_GHost->m_Language->UnableToKickFoundMoreThanOneMatch( Payload ) );
+            SendAllChat( m_GHost->m_Language->CantKickPlayers( ) );
           }
         } else {
-          SendAllChat( m_GHost->m_Language->CantKickPlayers( ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !LATENCY (set game latency)
       //
-      else if ( Command == "latency" && ( AdminCheck || RootAdminCheck ) ) {
-        if ( Payload.empty( ) ) {
-          SendAllChat( m_GHost->m_Language->LatencyIs( UTIL_ToString( m_Latency ) ) );
-        } else {
-          m_Latency = UTIL_ToUInt32( Payload );
-
-          if ( m_Latency <= 20 ) {
-            m_Latency = 20;
-            SendAllChat( m_GHost->m_Language->SettingLatencyToMinimum( "20" ) );
-          } else if ( m_Latency >= 500 ) {
-            m_Latency = 500;
-            SendAllChat( m_GHost->m_Language->SettingLatencyToMaximum( "500" ) );
+      else if ( Command == "latency" ) {
+        if ( HasAccess( ACCESS_SETTINGS ) ) {
+          if ( Payload.empty( ) ) {
+            SendAllChat( m_GHost->m_Language->LatencyIs( UTIL_ToString( m_Latency ) ) );
           } else {
-            SendAllChat( m_GHost->m_Language->SettingLatencyTo( UTIL_ToString( m_Latency ) ) );
+            m_Latency = UTIL_ToUInt32( Payload );
+
+            if ( m_Latency <= 20 ) {
+              m_Latency = 20;
+              SendAllChat( m_GHost->m_Language->SettingLatencyToMinimum( "20" ) );
+            } else if ( m_Latency >= 500 ) {
+              m_Latency = 500;
+              SendAllChat( m_GHost->m_Language->SettingLatencyToMaximum( "500" ) );
+            } else {
+              SendAllChat( m_GHost->m_Language->SettingLatencyTo( UTIL_ToString( m_Latency ) ) );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !LOCK
       //
-      else if ( Command == "lock" && ( RootAdminCheck || IsOwner( User ) ) ) {
-        SendAllChat( m_GHost->m_Language->GameLocked( ) );
-        m_Locked = true;
+      else if ( Command == "lock" ) {
+        if ( HasAccess( ACCESS_LOCK ) ) {
+          SendAllChat( m_GHost->m_Language->GameLocked( ) );
+          m_Locked = true;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !MESSAGES
       //
-      else if ( Command == "messages" && ( AdminCheck || RootAdminCheck ) ) {
-        if ( Payload == "on" ) {
-          SendAllChat( m_GHost->m_Language->LocalAdminMessagesEnabled( ) );
-          m_LocalAdminMessages = true;
-        } else if ( Payload == "off" ) {
-          SendAllChat( m_GHost->m_Language->LocalAdminMessagesDisabled( ) );
-          m_LocalAdminMessages = false;
+      else if ( Command == "messages" ) {
+        if ( HasAccess( ACCESS_CONTROL ) ) {
+          if ( Payload == "on" ) {
+            SendAllChat( m_GHost->m_Language->LocalAdminMessagesEnabled( ) );
+            m_LocalAdminMessages = true;
+          } else if ( Payload == "off" ) {
+            SendAllChat( m_GHost->m_Language->LocalAdminMessagesDisabled( ) );
+            m_LocalAdminMessages = false;
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !MUTE
       //
       else if ( Command == "mute" ) {
-        CGamePlayer *LastMatch = NULL;
-        uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+        if ( IsOwner( User ) || HasAccess( ACCESS_MUTE ) ) {
+          CGamePlayer *LastMatch = NULL;
+          uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
-        if ( Matches == 0 ) {
-          SendAllChat( m_GHost->m_Language->UnableToMuteNoMatchesFound( Payload ) );
-        } else if ( Matches == 1 ) {
-          SendAllChat( m_GHost->m_Language->MutedPlayer( LastMatch->GetName( ), User ) );
-          LastMatch->SetMuted( true );
+          if ( Matches == 0 ) {
+            SendAllChat( m_GHost->m_Language->UnableToMuteNoMatchesFound( Payload ) );
+          } else if ( Matches == 1 ) {
+            SendAllChat( m_GHost->m_Language->MutedPlayer( LastMatch->GetName( ), User ) );
+            LastMatch->SetMuted( true );
+          } else {
+            SendAllChat( m_GHost->m_Language->UnableToMuteFoundMoreThanOneMatch( Payload ) );
+          }
         } else {
-          SendAllChat( m_GHost->m_Language->UnableToMuteFoundMoreThanOneMatch( Payload ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
@@ -1566,159 +1688,141 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !MUTEALL
       //
       else if ( Command == "muteall" && m_GameLoaded ) {
-        SendAllChat( m_GHost->m_Language->GlobalChatMuted( ) );
-        m_MuteAll = true;
+        if ( IsOwner( User ) || HasAccess( ACCESS_MUTE ) ) {
+          SendAllChat( m_GHost->m_Language->GlobalChatMuted( ) );
+          m_MuteAll = true;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !OPEN (open slot)
       //
       else if ( Command == "open" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded ) {
-        // open as many slots as specified, e.g. "5 10" opens slots 5 and 10
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // open as many slots as specified, e.g. "5 10" opens slots 5 and 10
 
-        stringstream SS;
-        SS << Payload;
+          stringstream SS;
+          SS << Payload;
 
-        while ( !SS.eof( ) ) {
-          uint32_t SID;
-          SS >> SID;
+          while ( !SS.eof( ) ) {
+            uint32_t SID;
+            SS >> SID;
 
-          if ( SS.fail( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to open command" );
-            break;
-          } else {
-            OpenSlot( (unsigned char)( SID - 1 ), true );
+            if ( SS.fail( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input to open command" );
+              break;
+            } else {
+              OpenSlot( (unsigned char)( SID - 1 ), true );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !OPENALL
       //
       else if ( Command == "openall" && !m_GameLoading && !m_GameLoaded ) {
-        OpenAllSlots( );
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          OpenAllSlots( );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !OWNER (set game owner)
       //
       else if ( Command == "owner" ) {
-        if ( RootAdminCheck || IsOwner( User ) || !GetPlayerFromName( m_OwnerName, false ) ) {
-          if ( !Payload.empty( ) ) {
-            SendAllChat( m_GHost->m_Language->SettingGameOwnerTo( Payload ) );
-            m_OwnerName = Payload;
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) || HasAccess( ACCESS_CONTROL ) ) {
+          if ( IsOwner( User ) || HasAccess( ACCESS_CONTROL ) || ( HasAccess( ACCESS_HOST ) && !GetPlayerFromName( m_OwnerName, false ) ) ) {
+            if ( !Payload.empty( ) ) {
+              SendAllChat( m_GHost->m_Language->SettingGameOwnerTo( Payload ) );
+              m_OwnerName = Payload;
+            } else {
+              SendAllChat( m_GHost->m_Language->SettingGameOwnerTo( User ) );
+              m_OwnerName = User;
+            }
           } else {
-            SendAllChat( m_GHost->m_Language->SettingGameOwnerTo( User ) );
-            m_OwnerName = User;
+            SendAllChat( m_GHost->m_Language->UnableToSetGameOwner( m_OwnerName ) );
           }
         } else {
-          SendAllChat( m_GHost->m_Language->UnableToSetGameOwner( m_OwnerName ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !PING
       //
       else if ( Command == "ping" ) {
-        // kick players with ping higher than payload if payload isn't empty
-        // we only do this if the game hasn't started since we don't want to kick players from a game in progress
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          // kick players with ping higher than payload if payload isn't empty
+          // we only do this if the game hasn't started since we don't want to kick players from a game in progress
 
-        uint32_t Kicked = 0;
-        uint32_t KickPing = 0;
+          uint32_t Kicked = 0;
+          uint32_t KickPing = 0;
 
-        if ( !m_GameLoading && !m_GameLoaded && !Payload.empty( ) ) {
-          KickPing = UTIL_ToUInt32( Payload );
-        }
+          if ( !m_GameLoading && !m_GameLoaded && !Payload.empty( ) ) {
+            KickPing = UTIL_ToUInt32( Payload );
+          }
 
-        // copy the m_Players vector so we can sort by descending ping so it's easier to find players with high pings
+          // copy the m_Players vector so we can sort by descending ping so it's easier to find players with high pings
 
-        vector<CGamePlayer *> SortedPlayers = m_Players;
-        sort( SortedPlayers.begin( ), SortedPlayers.end( ), CGamePlayerSortDescByPing( ) );
-        string Pings;
+          vector<CGamePlayer *> SortedPlayers = m_Players;
+          sort( SortedPlayers.begin( ), SortedPlayers.end( ), CGamePlayerSortDescByPing( ) );
+          string Pings;
 
-        for ( vector<CGamePlayer *> :: iterator i = SortedPlayers.begin( ); i != SortedPlayers.end( ); ++i ) {
-          Pings += (*i)->GetNameTerminated( );
-          Pings += ": ";
+          for ( vector<CGamePlayer *> :: iterator i = SortedPlayers.begin( ); i != SortedPlayers.end( ); ++i ) {
+            Pings += (*i)->GetNameTerminated( );
+            Pings += ": ";
 
-          if ( (*i)->GetNumPings( ) > 0 ) {
-            Pings += UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) );
+            if ( (*i)->GetNumPings( ) > 0 ) {
+              Pings += UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) );
 
-            if ( !m_GameLoading && !m_GameLoaded && !(*i)->GetReserved( ) && KickPing > 0 && (*i)->GetPing( m_GHost->m_LCPings ) > KickPing ) {
-              (*i)->SetDeleteMe( true );
-              (*i)->SetLeftReason( "was kicked for excessive ping " + UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) ) + " > " + UTIL_ToString( KickPing ) );
-              (*i)->SetLeftCode( PLAYERLEAVE_LOBBY );
-              OpenSlot( GetSIDFromPID( (*i)->GetPID( ) ), false );
-              Kicked++;
+              if ( !m_GameLoading && !m_GameLoaded && !(*i)->GetReserved( ) && KickPing > 0 && (*i)->GetPing( m_GHost->m_LCPings ) > KickPing ) {
+                (*i)->SetDeleteMe( true );
+                (*i)->SetLeftReason( "was kicked for excessive ping " + UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) ) + " > " + UTIL_ToString( KickPing ) );
+                (*i)->SetLeftCode( PLAYERLEAVE_LOBBY );
+                OpenSlot( GetSIDFromPID( (*i)->GetPID( ) ), false );
+                Kicked++;
+              }
+
+              Pings += "ms";
+            } else {
+              Pings += "N/A";
             }
 
-            Pings += "ms";
-          } else {
-            Pings += "N/A";
+            if ( i != SortedPlayers.end( ) - 1 ) {
+              Pings += ", ";
+            }
+
+            if ( ( m_GameLoading || m_GameLoaded ) && Pings.size( ) > 100 ) {
+              // cut the text into multiple lines ingame
+
+              SendAllChat( Pings );
+              Pings.clear( );
+            }
           }
 
-          if ( i != SortedPlayers.end( ) - 1 ) {
-            Pings += ", ";
-          }
-
-          if ( ( m_GameLoading || m_GameLoaded ) && Pings.size( ) > 100 ) {
-            // cut the text into multiple lines ingame
-
+          if ( !Pings.empty( ) ) {
             SendAllChat( Pings );
-            Pings.clear( );
           }
-        }
 
-        if ( !Pings.empty( ) ) {
-          SendAllChat( Pings );
-        }
-
-        if ( Kicked > 0 ) {
-          SendAllChat( m_GHost->m_Language->KickingPlayersWithPingsGreaterThan( UTIL_ToString( Kicked ), UTIL_ToString( KickPing ) ) );
+          if ( Kicked > 0 ) {
+            SendAllChat( m_GHost->m_Language->KickingPlayersWithPingsGreaterThan( UTIL_ToString( Kicked ), UTIL_ToString( KickPing ) ) );
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !PRIV (rehost as private game)
       //
       else if ( Command == "priv" && !Payload.empty( ) && !m_CountDownStarted && !m_SaveGame ) {
-        if ( Payload.length() < 31 ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] trying to rehost as private game [" + Payload + "]" );
-          SendAllChat( m_GHost->m_Language->TryingToRehostAsPrivateGame( Payload ) );
-          m_GameState = GAME_PRIVATE;
-          m_LastGameName = m_GameName;
-          m_GameName = Payload;
-          m_HostCounter = m_GHost->m_HostCounter++;
-          m_RefreshError = false;
-          m_RefreshRehosted = true;
-
-          for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-            // unqueue any existing game refreshes because we're going to assume the next successful game refresh indicates that the rehost worked
-            // this ignores the fact that it's possible a game refresh was just sent and no response has been received yet
-            // we assume this won't happen very often since the only downside is a potential false positive
-
-            (*i)->UnqueueGameRefreshes( );
-            (*i)->QueueGameUncreate( );
-            (*i)->QueueEnterChat( );
-
-            // we need to send the game creation message now because private games are not refreshed
-
-            (*i)->QueueGameCreate( m_GameState, m_GameName, string( ), m_Map, NULL, m_HostCounter );
-
-            if ( (*i)->GetPasswordHashType( ) != "pvpgn" ) {
-              (*i)->QueueEnterChat( );
-            }
-          }
-
-          m_CreationTime = GetTime( );
-          m_LastRefreshTime = GetTime( );
-        } else {
-          SendAllChat( m_GHost->m_Language->UnableToCreateGameNameTooLong( Payload ) );
-        }
-      }
-      //
-      // !PUB (rehost as public game)
-      //
-      else if ( Command == "pub" && !Payload.empty( ) && !m_CountDownStarted && !m_SaveGame ) {
-        if ( Payload.find_first_of( "#" ) == string :: npos ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
           if ( Payload.length() < 31 ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] trying to rehost as public game [" + Payload + "]" );
-            SendAllChat( m_GHost->m_Language->TryingToRehostAsPublicGame( Payload ) );
-            m_GameState = GAME_PUBLIC;
+            CONSOLE_Print( "[GAME: " + m_GameName + "] trying to rehost as private game [" + Payload + "]" );
+            SendAllChat( m_GHost->m_Language->TryingToRehostAsPrivateGame( Payload ) );
+            m_GameState = GAME_PRIVATE;
             m_LastGameName = m_GameName;
             m_GameName = Payload;
             m_HostCounter = m_GHost->m_HostCounter++;
@@ -1734,7 +1838,13 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
               (*i)->QueueGameUncreate( );
               (*i)->QueueEnterChat( );
 
-              // the game creation message will be sent on the next refresh
+              // we need to send the game creation message now because private games are not refreshed
+
+              (*i)->QueueGameCreate( m_GameState, m_GameName, string( ), m_Map, NULL, m_HostCounter );
+
+              if ( (*i)->GetPasswordHashType( ) != "pvpgn" ) {
+                (*i)->QueueEnterChat( );
+              }
             }
 
             m_CreationTime = GetTime( );
@@ -1743,237 +1853,337 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
             SendAllChat( m_GHost->m_Language->UnableToCreateGameNameTooLong( Payload ) );
           }
         } else {
-          SendAllChat( m_GHost->m_Language->UnableToCreateGameInvalidCharacters( Payload ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
+      }
+      //
+      // !PUB (rehost as public game)
+      //
+      else if ( Command == "pub" && !Payload.empty( ) && !m_CountDownStarted && !m_SaveGame ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          if ( Payload.find_first_of( "#" ) == string :: npos ) {
+            if ( Payload.length() < 31 ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] trying to rehost as public game [" + Payload + "]" );
+              SendAllChat( m_GHost->m_Language->TryingToRehostAsPublicGame( Payload ) );
+              m_GameState = GAME_PUBLIC;
+              m_LastGameName = m_GameName;
+              m_GameName = Payload;
+              m_HostCounter = m_GHost->m_HostCounter++;
+              m_RefreshError = false;
+              m_RefreshRehosted = true;
+
+              for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+                // unqueue any existing game refreshes because we're going to assume the next successful game refresh indicates that the rehost worked
+                // this ignores the fact that it's possible a game refresh was just sent and no response has been received yet
+                // we assume this won't happen very often since the only downside is a potential false positive
+
+                (*i)->UnqueueGameRefreshes( );
+                (*i)->QueueGameUncreate( );
+                (*i)->QueueEnterChat( );
+
+                // the game creation message will be sent on the next refresh
+              }
+
+              m_CreationTime = GetTime( );
+              m_LastRefreshTime = GetTime( );
+            } else {
+              SendAllChat( m_GHost->m_Language->UnableToCreateGameNameTooLong( Payload ) );
+            }
+          } else {
+            SendAllChat( m_GHost->m_Language->UnableToCreateGameInvalidCharacters( Payload ) );
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !REFRESH (turn on or off refresh messages)
       //
       else if ( Command == "refresh" && !m_CountDownStarted ) {
-        if ( Payload == "on" ) {
-          SendAllChat( m_GHost->m_Language->RefreshMessagesEnabled( ) );
-          m_RefreshMessages = true;
-        } else if ( Payload == "off" ) {
-          SendAllChat( m_GHost->m_Language->RefreshMessagesDisabled( ) );
-          m_RefreshMessages = false;
+        if ( HasAccess( ACCESS_SETTINGS ) ) {
+          if ( Payload == "on" ) {
+            SendAllChat( m_GHost->m_Language->RefreshMessagesEnabled( ) );
+            m_RefreshMessages = true;
+          } else if ( Payload == "off" ) {
+            SendAllChat( m_GHost->m_Language->RefreshMessagesDisabled( ) );
+            m_RefreshMessages = false;
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !SAY
       //
-      else if ( Command == "say" && !Payload.empty( ) && ( AdminCheck || RootAdminCheck ) ) {
-        for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-          (*i)->QueueChatCommand( Payload );
-        }
+      else if ( Command == "say" && !Payload.empty( ) ) {
+        if ( HasAccess( ACCESS_SAY ) ) {
+          for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+            (*i)->QueueChatCommand( Payload );
+          }
 
-        HideCommand = true;
+          HideCommand = true;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !SCORES
       //
       else if ( Command == "scores" ) {
-        ShowTeamScores( );
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          ShowTeamScores( );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !SENDLAN
       //
-      else if ( Command == "sendlan" && !Payload.empty( ) && !m_CountDownStarted && ( AdminCheck || RootAdminCheck ) ) {
-        // extract the ip and the port
-        // e.g. "1.2.3.4 6112" -> ip: "1.2.3.4", port: "6112"
+      else if ( Command == "sendlan" && !Payload.empty( ) && !m_CountDownStarted ) {
+        if ( HasAccess( ACCESS_ADVANCED_HOST ) ) {
+          // extract the ip and the port
+          // e.g. "1.2.3.4 6112" -> ip: "1.2.3.4", port: "6112"
 
-        string IP;
-        uint32_t Port = 6112;
-        stringstream SS;
-        SS << Payload;
-        SS >> IP;
+          string IP;
+          uint32_t Port = 6112;
+          stringstream SS;
+          SS << Payload;
+          SS >> IP;
 
-        if ( !SS.eof( ) ) {
-          SS >> Port;
-        }
-
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad inputs to sendlan command" );
-        } else {
-          // construct a fixed host counter which will be used to identify players from this "realm" (i.e. LAN)
-          // the fixed host counter's 4 most significant bits will contain a 4 bit ID (0-15)
-          // the rest of the fixed host counter will contain the 28 least significant bits of the actual host counter
-          // since we're destroying 4 bits of information here the actual host counter should not be greater than 2^28 which is a reasonable assumption
-          // when a player joins a game we can obtain the ID from the received host counter
-          // note: LAN broadcasts use an ID of 0, battle.net refreshes use an ID of 1-10, the rest are unused
-
-          uint32_t FixedHostCounter = m_HostCounter & 0x0FFFFFFF;
-
-          // we send 12 for SlotsTotal because this determines how many PID's Warcraft 3 allocates
-          // we need to make sure Warcraft 3 allocates at least SlotsTotal + 1 but at most 12 PID's
-          // this is because we need an extra PID for the virtual host player (but we always delete the virtual host player when the 12th person joins)
-          // however, we can't send 13 for SlotsTotal because this causes Warcraft 3 to crash when sharing control of units
-          // nor can we send SlotsTotal because then Warcraft 3 crashes when playing maps with less than 12 PID's (because of the virtual host player taking an extra PID)
-          // we also send 12 for SlotsOpen because Warcraft 3 assumes there's always at least one player in the game (the host)
-          // so if we try to send accurate numbers it'll always be off by one and results in Warcraft 3 assuming the game is full when it still needs one more player
-          // the easiest solution is to simply send 12 for both so the game will always show up as (1/12) players
-
-          if ( m_SaveGame ) {
-            // note: the PrivateGame flag is not set when broadcasting to LAN (as you might expect)
-
-            uint32_t MapGameType = MAPGAMETYPE_SAVEDGAME;
-            BYTEARRAY MapWidth;
-            MapWidth.push_back( 0 );
-            MapWidth.push_back( 0 );
-            BYTEARRAY MapHeight;
-            MapHeight.push_back( 0 );
-            MapHeight.push_back( 0 );
-            m_GHost->m_UDPSocket->SendTo( IP, Port, m_Protocol->SEND_W3GS_GAMEINFO( m_GHost->m_TFT, m_GHost->m_LANWar3Version, UTIL_CreateByteArray( MapGameType, false ), m_Map->GetMapGameFlags( ), MapWidth, MapHeight, m_GameName, "Varlock", GetTime( ) - m_CreationTime, "Save\\Multiplayer\\" + m_SaveGame->GetFileNameNoPath( ), m_SaveGame->GetMagicNumber( ), 12, 12, m_HostPort, FixedHostCounter, m_EntryKey ) );
-          } else {
-            // note: the PrivateGame flag is not set when broadcasting to LAN (as you might expect)
-            // note: we do not use m_Map->GetMapGameType because none of the filters are set when broadcasting to LAN (also as you might expect)
-
-            uint32_t MapGameType = MAPGAMETYPE_UNKNOWN0;
-            m_GHost->m_UDPSocket->SendTo( IP, Port, m_Protocol->SEND_W3GS_GAMEINFO( m_GHost->m_TFT, m_GHost->m_LANWar3Version, UTIL_CreateByteArray( MapGameType, false ), m_Map->GetMapGameFlags( ), m_Map->GetMapWidth( ), m_Map->GetMapHeight( ), m_GameName, "Varlock", GetTime( ) - m_CreationTime, m_Map->GetMapPath( ), m_Map->GetMapCRC( ), 12, 12, m_HostPort, FixedHostCounter, m_EntryKey ) );
+          if ( !SS.eof( ) ) {
+            SS >> Port;
           }
+
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad inputs to sendlan command" );
+          } else {
+            // construct a fixed host counter which will be used to identify players from this "realm" (i.e. LAN)
+            // the fixed host counter's 4 most significant bits will contain a 4 bit ID (0-15)
+            // the rest of the fixed host counter will contain the 28 least significant bits of the actual host counter
+            // since we're destroying 4 bits of information here the actual host counter should not be greater than 2^28 which is a reasonable assumption
+            // when a player joins a game we can obtain the ID from the received host counter
+            // note: LAN broadcasts use an ID of 0, battle.net refreshes use an ID of 1-10, the rest are unused
+
+            uint32_t FixedHostCounter = m_HostCounter & 0x0FFFFFFF;
+
+            // we send 12 for SlotsTotal because this determines how many PID's Warcraft 3 allocates
+            // we need to make sure Warcraft 3 allocates at least SlotsTotal + 1 but at most 12 PID's
+            // this is because we need an extra PID for the virtual host player (but we always delete the virtual host player when the 12th person joins)
+            // however, we can't send 13 for SlotsTotal because this causes Warcraft 3 to crash when sharing control of units
+            // nor can we send SlotsTotal because then Warcraft 3 crashes when playing maps with less than 12 PID's (because of the virtual host player taking an extra PID)
+            // we also send 12 for SlotsOpen because Warcraft 3 assumes there's always at least one player in the game (the host)
+            // so if we try to send accurate numbers it'll always be off by one and results in Warcraft 3 assuming the game is full when it still needs one more player
+            // the easiest solution is to simply send 12 for both so the game will always show up as (1/12) players
+
+            if ( m_SaveGame ) {
+              // note: the PrivateGame flag is not set when broadcasting to LAN (as you might expect)
+
+              uint32_t MapGameType = MAPGAMETYPE_SAVEDGAME;
+              BYTEARRAY MapWidth;
+              MapWidth.push_back( 0 );
+              MapWidth.push_back( 0 );
+              BYTEARRAY MapHeight;
+              MapHeight.push_back( 0 );
+              MapHeight.push_back( 0 );
+              m_GHost->m_UDPSocket->SendTo( IP, Port, m_Protocol->SEND_W3GS_GAMEINFO( m_GHost->m_TFT, m_GHost->m_LANWar3Version, UTIL_CreateByteArray( MapGameType, false ), m_Map->GetMapGameFlags( ), MapWidth, MapHeight, m_GameName, "Varlock", GetTime( ) - m_CreationTime, "Save\\Multiplayer\\" + m_SaveGame->GetFileNameNoPath( ), m_SaveGame->GetMagicNumber( ), 12, 12, m_HostPort, FixedHostCounter, m_EntryKey ) );
+            } else {
+              // note: the PrivateGame flag is not set when broadcasting to LAN (as you might expect)
+              // note: we do not use m_Map->GetMapGameType because none of the filters are set when broadcasting to LAN (also as you might expect)
+
+              uint32_t MapGameType = MAPGAMETYPE_UNKNOWN0;
+              m_GHost->m_UDPSocket->SendTo( IP, Port, m_Protocol->SEND_W3GS_GAMEINFO( m_GHost->m_TFT, m_GHost->m_LANWar3Version, UTIL_CreateByteArray( MapGameType, false ), m_Map->GetMapGameFlags( ), m_Map->GetMapWidth( ), m_Map->GetMapHeight( ), m_GameName, "Varlock", GetTime( ) - m_CreationTime, m_Map->GetMapPath( ), m_Map->GetMapCRC( ), 12, 12, m_HostPort, FixedHostCounter, m_EntryKey ) );
+            }
+          }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !SP
       //
       else if ( Command == "sp" && !m_CountDownStarted ) {
-        SendAllChat( m_GHost->m_Language->ShufflingPlayers( ) );
-        ShuffleSlots( );
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          SendAllChat( m_GHost->m_Language->ShufflingPlayers( ) );
+          ShuffleSlots( );
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !START
       //
       else if ( Command == "start" && !m_CountDownStarted ) {
-        // if the player sent "!start force" skip the checks and start the countdown
-        // otherwise check that the game is ready to start
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          // if the player sent "!start force" skip the checks and start the countdown
+          // otherwise check that the game is ready to start
 
-        if ( Payload == "force" ) {
-          StartCountDown( true );
-        } else {
-          if ( GetTicks( ) - m_LastPlayerLeaveTicks >= 2000 ) {
-            StartCountDown( false );
+          if ( Payload == "force" ) {
+            StartCountDown( true );
           } else {
-            SendAllChat( m_GHost->m_Language->CountDownAbortedSomeoneLeftRecently( ) );
+            if ( GetTicks( ) - m_LastPlayerLeaveTicks >= 2000 ) {
+              StartCountDown( false );
+            } else {
+              SendAllChat( m_GHost->m_Language->CountDownAbortedSomeoneLeftRecently( ) );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !SWAP (swap slots)
       //
       else if ( Command == "swap" && !Payload.empty( ) && !m_GameLoading && !m_GameLoaded ) {
-        uint32_t SID1;
-        uint32_t SID2;
-        stringstream SS;
-        SS << Payload;
-        SS >> SID1;
+        if ( IsOwner( User ) || HasAccess( ACCESS_HOST ) ) {
+          uint32_t SID1;
+          uint32_t SID2;
+          stringstream SS;
+          SS << Payload;
+          SS >> SID1;
 
-        if ( SS.fail( ) ) {
-          CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to swap command" );
-        } else {
-          if ( SS.eof( ) ) {
-            CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to swap command" );
+          if ( SS.fail( ) ) {
+            CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #1 to swap command" );
           } else {
-            SS >> SID2;
-
-            if ( SS.fail( ) ) {
-              CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to swap command" );
+            if ( SS.eof( ) ) {
+              CONSOLE_Print( "[GAME: " + m_GameName + "] missing input #2 to swap command" );
             } else {
-              SwapSlots( (unsigned char)( SID1 - 1 ), (unsigned char)( SID2 - 1 ) );
+              SS >> SID2;
+
+              if ( SS.fail( ) ) {
+                CONSOLE_Print( "[GAME: " + m_GameName + "] bad input #2 to swap command" );
+              } else {
+                SwapSlots( (unsigned char)( SID1 - 1 ), (unsigned char)( SID2 - 1 ) );
+              }
             }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !SYNCLIMIT
       //
-      else if ( Command == "synclimit" && ( AdminCheck || RootAdminCheck ) ) {
-        if ( Payload.empty( ) ) {
-          SendAllChat( m_GHost->m_Language->SyncLimitIs( UTIL_ToString( m_SyncLimit ) ) );
-        } else {
-          m_SyncLimit = UTIL_ToUInt32( Payload );
-
-          if ( m_SyncLimit <= 10 ) {
-            m_SyncLimit = 10;
-            SendAllChat( m_GHost->m_Language->SettingSyncLimitToMinimum( "10" ) );
-          } else if ( m_SyncLimit >= 10000 ) {
-            m_SyncLimit = 10000;
-            SendAllChat( m_GHost->m_Language->SettingSyncLimitToMaximum( "10000" ) );
+      else if ( Command == "synclimit" ) {
+        if ( HasAccess( ACCESS_SETTINGS ) ) {
+          if ( Payload.empty( ) ) {
+            SendAllChat( m_GHost->m_Language->SyncLimitIs( UTIL_ToString( m_SyncLimit ) ) );
           } else {
-            SendAllChat( m_GHost->m_Language->SettingSyncLimitTo( UTIL_ToString( m_SyncLimit ) ) );
+            m_SyncLimit = UTIL_ToUInt32( Payload );
+
+            if ( m_SyncLimit <= 10 ) {
+              m_SyncLimit = 10;
+              SendAllChat( m_GHost->m_Language->SettingSyncLimitToMinimum( "10" ) );
+            } else if ( m_SyncLimit >= 10000 ) {
+              m_SyncLimit = 10000;
+              SendAllChat( m_GHost->m_Language->SettingSyncLimitToMaximum( "10000" ) );
+            } else {
+              SendAllChat( m_GHost->m_Language->SettingSyncLimitTo( UTIL_ToString( m_SyncLimit ) ) );
+            }
           }
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !UNHOST
       //
       else if ( Command == "unhost" && !m_CountDownStarted ) {
-        m_Exiting = true;
+        if ( IsOwner( User ) || HasAccess( ACCESS_CONTROL ) ) {
+          m_Exiting = true;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !UNLOCK
       //
-      else if ( Command == "unlock" && ( RootAdminCheck || IsOwner( User ) ) ) {
-        SendAllChat( m_GHost->m_Language->GameUnlocked( ) );
-        m_Locked = false;
+      else if ( Command == "unlock" ) {
+        if ( HasAccess( ACCESS_LOCK ) ) {
+          SendAllChat( m_GHost->m_Language->GameUnlocked( ) );
+          m_Locked = false;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !UNMUTE
       //
       else if ( Command == "unmute" ) {
-        CGamePlayer *LastMatch = NULL;
-        uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+        if ( IsOwner( User ) || HasAccess( ACCESS_MUTE ) ) {
+          CGamePlayer *LastMatch = NULL;
+          uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
-        if ( Matches == 0 ) {
-          SendAllChat( m_GHost->m_Language->UnableToMuteNoMatchesFound( Payload ) );
-        } else if ( Matches == 1 ) {
-          SendAllChat( m_GHost->m_Language->UnmutedPlayer( LastMatch->GetName( ), User ) );
-          LastMatch->SetMuted( false );
+          if ( Matches == 0 ) {
+            SendAllChat( m_GHost->m_Language->UnableToMuteNoMatchesFound( Payload ) );
+          } else if ( Matches == 1 ) {
+            SendAllChat( m_GHost->m_Language->UnmutedPlayer( LastMatch->GetName( ), User ) );
+            LastMatch->SetMuted( false );
+          } else {
+            SendAllChat( m_GHost->m_Language->UnableToMuteFoundMoreThanOneMatch( Payload ) );
+          }
         } else {
-          SendAllChat( m_GHost->m_Language->UnableToMuteFoundMoreThanOneMatch( Payload ) );
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
         }
       }
       //
       // !UNMUTEALL
       //
       else if ( Command == "unmuteall" && m_GameLoaded ) {
-        SendAllChat( m_GHost->m_Language->GlobalChatUnmuted( ) );
-        m_MuteAll = false;
+        if ( IsOwner( User ) || HasAccess( ACCESS_MUTE ) ) {
+          SendAllChat( m_GHost->m_Language->GlobalChatUnmuted( ) );
+          m_MuteAll = false;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !VIRTUALHOST
       //
-      else if ( Command == "virtualhost" && !Payload.empty( ) && Payload.size( ) <= 15 && !m_CountDownStarted && ( AdminCheck || RootAdminCheck ) ) {
-        DeleteVirtualHost( );
-        m_VirtualHostName = Payload;
+      else if ( Command == "virtualhost" && !Payload.empty( ) && Payload.size( ) <= 15 && !m_CountDownStarted ) {
+        if ( HasAccess( ACCESS_SETTINGS ) ) {
+          DeleteVirtualHost( );
+          m_VirtualHostName = Payload;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !VOTECANCEL
       //
-      else if ( Command == "votecancel" && !m_KickVotePlayer.empty( ) && ( AdminCheck || RootAdminCheck ) ) {
-        SendAllChat( m_GHost->m_Language->VoteKickCancelled( m_KickVotePlayer ) );
-        m_KickVotePlayer.clear( );
-        m_StartedKickVoteTime = 0;
+      else if ( Command == "votecancel" && !m_KickVotePlayer.empty( ) ) {
+        if ( IsOwner( User ) || HasAccess( ACCESS_KICK ) ) {
+          SendAllChat( m_GHost->m_Language->VoteKickCancelled( m_KickVotePlayer ) );
+          m_KickVotePlayer.clear( );
+          m_StartedKickVoteTime = 0;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
       //
       // !W
       //
-      else if ( Command == "w" && !Payload.empty( ) && ( AdminCheck || RootAdminCheck ) ) {
-        // extract the name and the message
-        // e.g. "Varlock hello there!" -> name: "Varlock", message: "hello there!"
+      else if ( Command == "w" && !Payload.empty( ) ) {
+        if ( HasAccess( ACCESS_SAY ) ) {
+          // extract the name and the message
+          // e.g. "Varlock hello there!" -> name: "Varlock", message: "hello there!"
 
-        string Name;
-        string Message;
-        string :: size_type MessageStart = Payload.find( " " );
+          string Name;
+          string Message;
+          string :: size_type MessageStart = Payload.find( " " );
 
-        if ( MessageStart != string :: npos ) {
-          Name = Payload.substr( 0, MessageStart );
-          Message = Payload.substr( MessageStart + 1 );
+          if ( MessageStart != string :: npos ) {
+            Name = Payload.substr( 0, MessageStart );
+            Message = Payload.substr( MessageStart + 1 );
 
-          for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
-            (*i)->QueueChatCommand( Message, Name, true );
+            for ( vector<CBNET *> :: iterator i = m_GHost->m_BNETs.begin( ); i != m_GHost->m_BNETs.end( ); ++i ) {
+              (*i)->QueueChatCommand( Message, Name, true );
+            }
           }
-        }
 
-        HideCommand = true;
+          HideCommand = true;
+        } else {
+          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
+        }
       }
     } else {
       CONSOLE_Print( "[GAME: " + m_GameName + "] admin command ignored, the game is locked" );
@@ -1996,7 +2206,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   //
 
   if ( Command == "checkme" ) {
-    SendChat( player, m_GHost->m_Language->CheckedPlayer( User, player->GetNumPings( ) > 0 ? UTIL_ToString( player->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( player->GetExternalIPString( ) ), AdminCheck || RootAdminCheck ? "Yes" : "No", IsOwner( User ) ? "Yes" : "No", player->GetSpoofed( ) ? "Yes" : "No", player->GetSpoofedRealm( ).empty( ) ? "Garena" : player->GetSpoofedRealm( ), player->GetReserved( ) ? "Yes" : "No" ) );
+    SendChat( player, m_GHost->m_Language->CheckedPlayer( User, player->GetNumPings( ) > 0 ? UTIL_ToString( player->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( player->GetExternalIPString( ) ), AdminAccess.any() ? "Yes" : "No", IsOwner( User ) ? "Yes" : "No", player->GetSpoofed( ) ? "Yes" : "No", player->GetSpoofedRealm( ).empty( ) ? "Garena" : player->GetSpoofedRealm( ), player->GetReserved( ) ? "Yes" : "No" ) );
   }
   //
   // !STATSDOTA
@@ -2017,7 +2227,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       saveType = "openstats";
     }
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedDPSChecks.push_back( PairedDPSCheck( string( ), m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, saveType ) ) );
     } else {
       m_PairedDPSChecks.push_back( PairedDPSCheck( User, m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, saveType ) ) );
@@ -2038,7 +2248,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedDPSChecks.push_back( PairedDPSCheck( string( ), m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "dota2" ) ) );
     } else {
       m_PairedDPSChecks.push_back( PairedDPSCheck( User, m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "dota2" ) ) );
@@ -2059,7 +2269,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedDPSChecks.push_back( PairedDPSCheck( string( ), m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "eihl" ) ) );
     } else {
       m_PairedDPSChecks.push_back( PairedDPSCheck( User, m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "eihl" ) ) );
@@ -2080,7 +2290,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedDPSChecks.push_back( PairedDPSCheck( string( ), m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "lod" ) ) );
     } else {
       m_PairedDPSChecks.push_back( PairedDPSCheck( User, m_GHost->m_DB->ThreadedDotAPlayerSummaryCheck( StatsUser, StatsRealm, "lod" ) ) );
@@ -2101,7 +2311,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedTPSChecks.push_back( PairedTPSCheck( string( ), m_GHost->m_DB->ThreadedTreePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
     } else {
       m_PairedTPSChecks.push_back( PairedTPSCheck( User, m_GHost->m_DB->ThreadedTreePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
@@ -2122,7 +2332,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedSPSChecks.push_back( PairedSPSCheck( string( ), m_GHost->m_DB->ThreadedSnipePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
     } else {
       m_PairedSPSChecks.push_back( PairedSPSCheck( User, m_GHost->m_DB->ThreadedSnipePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
@@ -2143,7 +2353,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedBPSChecks.push_back( PairedBPSCheck( string( ), m_GHost->m_DB->ThreadedShipsPlayerSummaryCheck( StatsUser, StatsRealm ) ) );
     } else {
       m_PairedBPSChecks.push_back( PairedBPSCheck( User, m_GHost->m_DB->ThreadedShipsPlayerSummaryCheck( StatsUser, StatsRealm ) ) );
@@ -2164,7 +2374,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedWPSChecks.push_back( PairedWPSCheck( string( ), m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "castlefight" ) ) );
     } else {
       m_PairedWPSChecks.push_back( PairedWPSCheck( User, m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "castlefight" ) ) );
@@ -2185,7 +2395,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedWPSChecks.push_back( PairedWPSCheck( string( ), m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "castlefight2" ) ) );
     } else {
       m_PairedWPSChecks.push_back( PairedWPSCheck( User, m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "castlefight2" ) ) );
@@ -2206,7 +2416,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedWPSChecks.push_back( PairedWPSCheck( string( ), m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "civwars" ) ) );
     } else {
       m_PairedWPSChecks.push_back( PairedWPSCheck( User, m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "civwars" ) ) );
@@ -2227,7 +2437,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedWPSChecks.push_back( PairedWPSCheck( string( ), m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "legionmega" ) ) );
     } else {
       m_PairedWPSChecks.push_back( PairedWPSCheck( User, m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "legionmega" ) ) );
@@ -2248,7 +2458,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedWPSChecks.push_back( PairedWPSCheck( string( ), m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "legionmega2" ) ) );
     } else {
       m_PairedWPSChecks.push_back( PairedWPSCheck( User, m_GHost->m_DB->ThreadedW3MMDPlayerSummaryCheck( StatsUser, StatsRealm, "legionmega2" ) ) );
@@ -2269,7 +2479,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     string StatsRealm = "";
     GetStatsUser( &StatsUser, &StatsRealm );
 
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       m_PairedGPSChecks.push_back( PairedGPSCheck( string( ), m_GHost->m_DB->ThreadedGamePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
     } else {
       m_PairedGPSChecks.push_back( PairedGPSCheck( User, m_GHost->m_DB->ThreadedGamePlayerSummaryCheck( StatsUser, StatsRealm ) ) );
@@ -2281,7 +2491,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   // !VERSION
   //
   else if ( Command == "version" ) {
-    if ( player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) ) ) {
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
       SendChat( player, m_GHost->m_Language->VersionAdmin( m_GHost->m_Version ) );
     } else {
       SendChat( player, m_GHost->m_Language->VersionNotAdmin( m_GHost->m_Version ) );
@@ -2440,7 +2650,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   // !VOTESTART
   //
 
-  bool votestartAuth = player->GetSpoofed( ) && ( AdminCheck || RootAdminCheck || IsOwner( User ) );
+  bool votestartAuth = player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) );
   bool votestartAutohost = m_GameState == GAME_PUBLIC && !m_GHost->m_AutoHostGameName.empty( ) && m_GHost->m_AutoHostMaximumGames != 0 && m_GHost->m_AutoHostAutoStartPlayers != 0 && m_AutoStartPlayers != 0;
   if ( Command == "votestart" && !m_CountDownStarted && (votestartAuth || votestartAutohost || !m_GHost->m_VoteStartAutohostOnly)) {
 

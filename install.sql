@@ -3,6 +3,8 @@ CREATE TABLE `admins` (
   `botid` int(11) NOT NULL,
   `name` varchar(15) NOT NULL,
   `server` varchar(100) NOT NULL,
+  `access` smallint(5) UNSIGNED NOT NULL,
+  `date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
