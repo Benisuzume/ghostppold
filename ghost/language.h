@@ -272,6 +272,7 @@ string TeamForfeited( string team );
 string ForfeitStatsWarning( );
 string ForfeitVote( string user );
 string ForfeitVotesNeeded( string votes, string total, string team );
+string CurrentGameNameIs( string gamename );
 };
 
 #endif

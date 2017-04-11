@@ -151,6 +151,7 @@ bool m_Tournament;                               // whether or not this is a uxt
 uint32_t m_TournamentMatchID;                    // if m_Tournament, this is the tournament match ID
 uint32_t m_TournamentChatID;                     // if m_Tournament, this is the chat id
 vector<FakePlayer>  m_FakePlayers;               // vector of fake players
+map<CGamePlayer*, CGamePlayer*> m_PartnerRequests; // map of partner requests
 
 public:
 vector<string> m_DoSayGames;            // vector of strings we should announce to the current game
@@ -406,6 +407,12 @@ virtual void CreateFakePlayer( unsigned char SID, string name = "" );
 virtual void DeleteFakePlayer( );
 virtual void ShowTeamScores( );
 virtual string GetJoinedRealm( uint32_t hostcounter );
+virtual void AddPartners( CGamePlayer* partner1, CGamePlayer* partner2 );
+virtual void RemovePartners( CGamePlayer* partner1, CGamePlayer* partner2 );
+virtual void AddPartnerRequest( CGamePlayer* requestee, CGamePlayer* receiver );
+virtual void RemovePartnerRequest( CGamePlayer* requestee );
+virtual CGamePlayer* GetPartnerReceiver( CGamePlayer* requestee );
+virtual CGamePlayer* GetPartnerRequestee( CGamePlayer* receiver );
 };
 
 struct QueuedSpoofAdd {

@@ -194,6 +194,7 @@ uint32_t m_GProxyReconnectKey;
 uint32_t m_LastGProxyAckTime;
 vector<string> m_IgnoreList;  // list of usernames this player is ignoring
 bool m_NoLag;                 // if the player wants to ignore lag screen
+CGamePlayer* m_Partner;       // player's partner
 
 public:
 CGamePlayer( CGameProtocol *nProtocol, CBaseGame *nGame, CTCPSocket *nSocket, unsigned char nPID, string nJoinedRealm, string nName, BYTEARRAY nInternalIP, bool nReserved );
@@ -388,6 +389,10 @@ bool GetNoLag( )
 {
   return m_NoLag;
 }
+CGamePlayer* GetPartner( )
+{
+  return m_Partner;
+}
 
 void SetFriendlyName( string nFriendlyName )
 {
@@ -520,6 +525,10 @@ void SetGProxyDisconnectNoticeSent( bool nGProxyDisconnectNoticeSent )
 void SetNoLag( bool nNoLag )
 {
   m_NoLag = nNoLag;
+}
+void SetPartner( CGamePlayer* nPartner )
+{
+  m_Partner = nPartner;
 }
 
 string GetNameTerminated( );

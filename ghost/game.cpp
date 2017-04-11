@@ -1751,70 +1751,6 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
         }
       }
       //
-      // !PING
-      //
-      else if ( Command == "ping" ) {
-        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
-          // kick players with ping higher than payload if payload isn't empty
-          // we only do this if the game hasn't started since we don't want to kick players from a game in progress
-
-          uint32_t Kicked = 0;
-          uint32_t KickPing = 0;
-
-          if ( !m_GameLoading && !m_GameLoaded && !Payload.empty( ) ) {
-            KickPing = UTIL_ToUInt32( Payload );
-          }
-
-          // copy the m_Players vector so we can sort by descending ping so it's easier to find players with high pings
-
-          vector<CGamePlayer *> SortedPlayers = m_Players;
-          sort( SortedPlayers.begin( ), SortedPlayers.end( ), CGamePlayerSortDescByPing( ) );
-          string Pings;
-
-          for ( vector<CGamePlayer *> :: iterator i = SortedPlayers.begin( ); i != SortedPlayers.end( ); ++i ) {
-            Pings += (*i)->GetNameTerminated( );
-            Pings += ": ";
-
-            if ( (*i)->GetNumPings( ) > 0 ) {
-              Pings += UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) );
-
-              if ( !m_GameLoading && !m_GameLoaded && !(*i)->GetReserved( ) && KickPing > 0 && (*i)->GetPing( m_GHost->m_LCPings ) > KickPing ) {
-                (*i)->SetDeleteMe( true );
-                (*i)->SetLeftReason( "was kicked for excessive ping " + UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) ) + " > " + UTIL_ToString( KickPing ) );
-                (*i)->SetLeftCode( PLAYERLEAVE_LOBBY );
-                OpenSlot( GetSIDFromPID( (*i)->GetPID( ) ), false );
-                Kicked++;
-              }
-
-              Pings += "ms";
-            } else {
-              Pings += "N/A";
-            }
-
-            if ( i != SortedPlayers.end( ) - 1 ) {
-              Pings += ", ";
-            }
-
-            if ( ( m_GameLoading || m_GameLoaded ) && Pings.size( ) > 100 ) {
-              // cut the text into multiple lines ingame
-
-              SendAllChat( Pings );
-              Pings.clear( );
-            }
-          }
-
-          if ( !Pings.empty( ) ) {
-            SendAllChat( Pings );
-          }
-
-          if ( Kicked > 0 ) {
-            SendAllChat( m_GHost->m_Language->KickingPlayersWithPingsGreaterThan( UTIL_ToString( Kicked ), UTIL_ToString( KickPing ) ) );
-          }
-        } else {
-          SendChat( player, m_GHost->m_Language->YouDontHaveAccessToThatCommand( ) );
-        }
-      }
-      //
       // !PRIV (rehost as private game)
       //
       else if ( Command == "priv" && !Payload.empty( ) && !m_CountDownStarted && !m_SaveGame ) {
@@ -2209,6 +2145,80 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     SendChat( player, m_GHost->m_Language->CheckedPlayer( User, player->GetNumPings( ) > 0 ? UTIL_ToString( player->GetPing( m_GHost->m_LCPings ) ) + "ms" : "N/A", m_GHost->FromCheck( player->GetExternalIPString( ) ), AdminAccess.any() ? "Yes" : "No", IsOwner( User ) ? "Yes" : "No", player->GetSpoofed( ) ? "Yes" : "No", player->GetSpoofedRealm( ).empty( ) ? "Garena" : player->GetSpoofedRealm( ), player->GetReserved( ) ? "Yes" : "No" ) );
   }
   //
+  // !GAMENAME
+  //
+  else if ( Command == "gamename" || Command == "gn" ) {
+    SendChat( player, m_GHost->m_Language->CurrentGameNameIs( m_GameName ) );
+  }
+  //
+  // !PING
+  //
+  else if ( Command == "ping" ) {
+    // kick players with ping higher than payload if payload isn't empty
+    // we only do this if the game hasn't started since we don't want to kick players from a game in progress
+
+    uint32_t Kicked = 0;
+    uint32_t KickPing = 0;
+
+    if ( !m_GameLoading && !m_GameLoaded && !Payload.empty( ) ) {
+      KickPing = UTIL_ToUInt32( Payload );
+    }
+
+    // copy the m_Players vector so we can sort by descending ping so it's easier to find players with high pings
+
+    vector<CGamePlayer *> SortedPlayers = m_Players;
+    sort( SortedPlayers.begin( ), SortedPlayers.end( ), CGamePlayerSortDescByPing( ) );
+    string Pings;
+
+    for ( vector<CGamePlayer *> :: iterator i = SortedPlayers.begin( ); i != SortedPlayers.end( ); ++i ) {
+      Pings += (*i)->GetNameTerminated( );
+      Pings += ": ";
+
+      if ( (*i)->GetNumPings( ) > 0 ) {
+        Pings += UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) );
+
+        if ( !m_GameLoading && !m_GameLoaded && ( IsOwner( User ) || HasAccess( ACCESS_KICK ) ) && !(*i)->GetReserved( ) && KickPing > 0 && (*i)->GetPing( m_GHost->m_LCPings ) > KickPing ) {
+          (*i)->SetDeleteMe( true );
+          (*i)->SetLeftReason( "was kicked for excessive ping " + UTIL_ToString( (*i)->GetPing( m_GHost->m_LCPings ) ) + " > " + UTIL_ToString( KickPing ) );
+          (*i)->SetLeftCode( PLAYERLEAVE_LOBBY );
+          OpenSlot( GetSIDFromPID( (*i)->GetPID( ) ), false );
+          Kicked++;
+        }
+
+        Pings += "ms";
+      } else {
+        Pings += "N/A";
+      }
+
+      if ( i != SortedPlayers.end( ) - 1 ) {
+        Pings += ", ";
+      }
+
+      if ( ( m_GameLoading || m_GameLoaded ) && Pings.size( ) > 100 ) {
+        // cut the text into multiple lines ingame
+
+        if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+          SendAllChat( Pings );
+        } else {
+          SendChat( player, Pings);
+        }
+        Pings.clear( );
+      }
+    }
+
+    if ( !Pings.empty( ) ) {
+      if ( IsOwner( User ) || HasAccess( ACCESS_PLAYER_STATUS ) ) {
+        SendAllChat( Pings );
+      } else {
+        SendChat( player, Pings);
+      }
+    }
+
+    if ( Kicked > 0 ) {
+      SendAllChat( m_GHost->m_Language->KickingPlayersWithPingsGreaterThan( UTIL_ToString( Kicked ), UTIL_ToString( KickPing ) ) );
+    }
+  }
+  //
   // !STATSDOTA
   //
   else if ( ( Command == "statsdota" || Command == "sd" ) && GetTime( ) - player->GetStatsDotASentTime( ) >= 5 ) {
@@ -2528,8 +2538,9 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   }
   //
   // !IGNORE
+  // !SQUELCH
   //
-  else if ( Command == "ignore" && !Payload.empty() ) {
+  else if ( ( Command == "ignore" || Command == "squelch" ) && !Payload.empty() ) {
     CGamePlayer *LastMatch = NULL;
     uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
@@ -2544,8 +2555,9 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
   }
   //
   // !UNIGNORE
+  // !UNSQUELCH
   //
-  else if ( Command == "unignore" && !Payload.empty() ) {
+  else if ( ( Command == "unignore" || Command == "unsquelch" ) && !Payload.empty() ) {
     CGamePlayer *LastMatch = NULL;
     uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
 
@@ -2556,6 +2568,55 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       SendChat( player, "You have unignored player [" + Payload + "]." );
     } else {
       SendChat( player, "Unable to unignore player [" + Payload + "]. Found more than one match." );
+    }
+  }
+  //
+  // !PARTNER
+  // !PARTNERACCEPT
+  //
+  else if ( Command == "partner" || Command == "pt" || Command == "partneraccept" || Command == "pa" ) {
+    if ( Payload.empty() ) {
+      CGamePlayer *requestee = GetPartnerRequestee( player );
+      if ( requestee == NULL ) {
+        SendChat( player, "No pending partner requests were found." );
+      } else if ( requestee == player ) {
+        SendChat( player, "Multiple partner requests are pending. Please provide the name of the one you'd like to accept." );
+      } else {
+        SendChat( player, "Accepting partner request from [" + requestee->GetFriendlyName( ) + "]." );
+        SendChat( requestee, "Partner request to [" + player->GetFriendlyName( ) + "] was accepted." );
+        AddPartners( requestee, player );
+      }
+    } else {
+      CGamePlayer *LastMatch = NULL;
+      uint32_t Matches = GetPlayerFromNamePartial( Payload, &LastMatch );
+      if ( Matches == 0 ) {
+        SendChat( player, "No match found for [" + Payload + "]." );
+      } else if ( Matches == 1 ) {
+        if ( GetPartnerReceiver( LastMatch ) == player ) {
+          SendChat( player, "Accepting partner request from [" + LastMatch->GetFriendlyName( ) + "]." );
+          SendChat( LastMatch, "Partner request to [" + player->GetFriendlyName( ) + "] was accepted." );
+          AddPartners( LastMatch, player );
+        } else {
+          SendChat( player, "Sending partner request to [" + LastMatch->GetFriendlyName( ) + "]." );
+          SendChat( LastMatch, "You have received a partner request from [" + player->GetFriendlyName( ) + "]." );
+          AddPartnerRequest( player, LastMatch );
+        }
+      } else {
+        SendChat( player, "Unable to send partner request to [" + Payload + "]. Found more than one match." );
+      }
+    }
+  }
+  //
+  // !UNPARTNER
+  //
+  else if ( Command == "unpartner" || Command == "up" ) {
+    CGamePlayer* partner = player->GetPartner( );
+    if ( partner == NULL ) {
+      SendChat( player, "You are currently not partnered." );
+    } else {
+      SendChat( player, "You are no longer partnered with [" + partner->GetFriendlyName( ) + "]." );
+      SendChat( partner, "Your partner [" + player->GetFriendlyName( ) + "] has unpartnered." );
+      RemovePartners( player, partner );
     }
   }
   //

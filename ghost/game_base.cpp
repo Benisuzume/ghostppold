@@ -3855,13 +3855,13 @@ void CBaseGame :: CloseAllSlots( )
 void CBaseGame :: ShuffleSlots( )
 {
   // we only want to shuffle the player slots
-  // that means we need to prevent this function from shuffling the open/closed/computer slots too
+  // that means we need to prevent this function from shuffling the closed/computer slots too
   // so we start by copying the player slots to a temporary vector
 
   vector<CGameSlot> PlayerSlots;
 
   for ( vector<CGameSlot> :: iterator i = m_Slots.begin( ); i != m_Slots.end( ); ++i ) {
-    if ( (*i).GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
+    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
       PlayerSlots.push_back( *i );
     }
   }
@@ -3881,6 +3881,45 @@ void CBaseGame :: ShuffleSlots( )
     }
 
     random_shuffle( SIDs.begin( ), SIDs.end( ) );
+
+    // since we have partners, we have to guarantee that partners "always" stay together
+    // if they can't stay together, (e.g. odd teams and everyone's partnered), try our best
+    // to do this, go through players and swap them around until everyone's partnered (if possible)
+
+    for (size_t i = 0; i < SIDs.size( ); i++) {
+      CGamePlayer* player = GetPlayerFromPID( PlayerSlots[SIDs[i]].GetPID( ) );
+
+      if (player == NULL) {
+        continue;
+      }
+
+      CGamePlayer* partner = player->GetPartner( );
+
+      if (partner == NULL) {
+        continue;
+      }
+
+      unsigned char playerTeam = PlayerSlots[i].GetTeam( );
+      unsigned char partnerTeam;
+
+      for (size_t j = 0; j < SIDs.size( ); j++) {
+        if ( PlayerSlots[SIDs[j]].GetPID( ) == partner->GetPID( ) ) {
+          partnerTeam = PlayerSlots[j].GetTeam( );
+          break;
+        }
+      }
+
+      if (playerTeam != partnerTeam) {
+        for (size_t k = 0; k < SIDs.size( ); k++) {
+          if ( PlayerSlots[k].GetTeam( ) == partnerTeam && ( GetPlayerFromPID( PlayerSlots[SIDs[k]].GetPID( ) ) == NULL || GetPlayerFromPID( PlayerSlots[SIDs[k]].GetPID( ) )->GetPartner( ) == NULL ) ) {
+            unsigned char temp = SIDs[k];
+            SIDs[k] = SIDs[i];
+            SIDs[i] = temp;
+            break;
+          }
+        }
+      }
+    }
 
     // now put the PlayerSlots vector in the same order as the SIDs vector
 
@@ -3906,7 +3945,7 @@ void CBaseGame :: ShuffleSlots( )
   vector<CGameSlot> Slots;
 
   for ( vector<CGameSlot> :: iterator i = m_Slots.begin( ); i != m_Slots.end( ); ++i ) {
-    if ( (*i).GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
+    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
       Slots.push_back( *CurrentPlayer );
       ++CurrentPlayer;
     } else {
@@ -4638,4 +4677,50 @@ string CBaseGame :: GetJoinedRealm( uint32_t hostcounter )
   }
 
   return JoinedRealm;
+}
+
+void CBaseGame :: AddPartners( CGamePlayer* partner1, CGamePlayer* partner2 )
+{
+  partner1->SetPartner( partner2 );
+  partner2->SetPartner( partner1 );
+
+  RemovePartnerRequest( partner1 );
+  RemovePartnerRequest( partner2 );
+}
+
+void CBaseGame :: RemovePartners( CGamePlayer* partner1, CGamePlayer* partner2 )
+{
+  partner1->SetPartner( NULL );
+  partner2->SetPartner( NULL );
+}
+
+void CBaseGame :: AddPartnerRequest( CGamePlayer* requestee, CGamePlayer* receiver )
+{
+  m_PartnerRequests[requestee] = receiver;
+}
+
+void CBaseGame :: RemovePartnerRequest( CGamePlayer* requestee )
+{
+  m_PartnerRequests.erase(requestee);
+}
+
+CGamePlayer* CBaseGame :: GetPartnerReceiver( CGamePlayer* requestee )
+{
+  return m_PartnerRequests[requestee];
+}
+
+CGamePlayer* CBaseGame :: GetPartnerRequestee( CGamePlayer* receiver )
+{
+  CGamePlayer* match = NULL;
+
+  for (map<CGamePlayer*, CGamePlayer*>::iterator it = m_PartnerRequests.begin(); it != m_PartnerRequests.end(); it++) {
+    if (it->second == receiver) {
+      if (match == NULL) {
+        match = it->first;
+      } else {
+        return receiver;
+      }
+    }
+  }
+  return match;
 }

@@ -1797,3 +1797,11 @@ string CLanguage :: ForfeitVotesNeeded( string votes, string total, string team 
   UTIL_Replace( Out, "$TEAM$", team );
   return Out;
 }
+
+string CLanguage :: CurrentGameNameIs( string gamename )
+{
+  string Out = m_CFG->GetString( "lang_0229", "lang_0229" );
+
+  UTIL_Replace( Out, "$GAMENAME$", gamename);
+  return Out;
+}
