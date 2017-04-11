@@ -1157,7 +1157,7 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
     Command = Message.substr( 1 );
   }
 
-  bitset<16> AdminAccess = bitset<16>((unsigned short int) 0);
+  bitset<16> AdminAccess = bitset<16>((unsigned short int)0);
 
   // Lazy approach, but it saves a function declaration and lots of scope meddling for, essentially, abstraction
   #define HasAccess( position ) AdminAccess.test( position )
@@ -1193,7 +1193,6 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
         QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
-
     //
     // !ADDBAN
     // !BAN
@@ -1254,7 +1253,6 @@ void CBNET :: BotCommand( string Message, string User, bool Whisper, bool ForceR
         QueueChatCommand( m_GHost->m_Language->YouDontHaveAccessToThatCommand( ), User, Whisper );
       }
     }
-
     //
     // !AUTOHOST
     //

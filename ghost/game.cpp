@@ -863,7 +863,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     }
   }
 
-  bitset<16> AdminAccess = bitset<16>((unsigned short int) 0);
+  bitset<16> AdminAccess = bitset<16>((unsigned short int)0);
 
   // Lazy approach, but it saves a function declaration and lots of scope meddling for, essentially, abstraction
   #define HasAccess( position ) AdminAccess.test( position )
@@ -992,7 +992,7 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
       // !ANNOUNCE
       //
       else if ( Command == "announce" && !m_CountDownStarted ) {
-        if ( HasAccess( ACCESS_MANAGEMENT ) ) {
+        if ( HasAccess( ACCESS_SAY ) ) {
           if ( Payload.empty( ) || Payload == "off" ) {
             SendAllChat( m_GHost->m_Language->AnnounceMessageDisabled( ) );
             SetAnnounce( 0, string( ) );

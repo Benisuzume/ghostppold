@@ -203,9 +203,9 @@ map<string, string> m_AnnounceList;            // certain users can have announc
 uint32_t m_LastAnnounceRefreshTime;            // refresh announcements list every 2 hours
 CCallableAnnounceList *m_CallableAnnounceList; // announcement list refresh in progress
 
-bool m_DisableBot;                       // whether this bot is currently disabled
+bool m_DisableBot;                             // whether this bot is currently disabled
 
-deque<HostNameInfo> m_HostNameCache;     // host name lookup cache
+deque<HostNameInfo> m_HostNameCache;           // host name lookup cache
 boost::mutex m_HostNameCacheMutex;
 
 CGHost( CConfig *CFG );
@@ -260,22 +260,22 @@ struct HostNameInfo {
 // command access levels
 
 #define VALUE_ACCESS(x) pow(2, x)
-#define ACCESS_CRITICAL 0
-#define ACCESS_MANAGEMENT 1
-#define ACCESS_CONTROL 2
-#define ACCESS_SETTINGS 3
-#define ACCESS_SAY 4
-#define ACCESS_ADVANCED_HOST 5
-#define ACCESS_UNASSIGNED_6 6
-#define ACCESS_HOST 7
-#define ACCESS_MAP 8
-#define ACCESS_BAN 9
-#define ACCESS_UNBAN 10
-#define ACCESS_KICK 11
-#define ACCESS_MUTE 12
-#define ACCESS_LOCK 13
-#define ACCESS_PLAYER_STATUS 14
-#define ACCESS_UNASSIGNED_15 15
+#define ACCESS_CRITICAL 15
+#define ACCESS_MANAGEMENT 14
+#define ACCESS_CONTROL 13
+#define ACCESS_SETTINGS 12
+#define ACCESS_SAY 11
+#define ACCESS_UNASSIGNED_10 10
+#define ACCESS_LOCK 9
+#define ACCESS_UNBAN 8
+#define ACCESS_BAN 7
+#define ACCESS_KICK 6
+#define ACCESS_MUTE 5
+#define ACCESS_ADVANCED_HOST 4
+#define ACCESS_HOST 3
+#define ACCESS_MAP 2
+#define ACCESS_PLAYER_STATUS 1
+#define ACCESS_UNASSIGNED_0 0
 #define DEFAULT_ACCESS VALUE_ACCESS(ACCESS_HOST) + VALUE_ACCESS(ACCESS_MAP)
 
 #endif
