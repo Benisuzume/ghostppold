@@ -380,7 +380,7 @@ CCallableGameUpdate *CGHostDBMySQL :: ThreadedGameUpdate( uint32_t id, string ma
   return Callable;
 }
 
-CCallableGamePlayerAdd *CGHostDBMySQL :: ThreadedGamePlayerAdd( uint32_t gameid, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype )
+CCallableGamePlayerAdd *CGHostDBMySQL :: ThreadedGamePlayerAdd( uint32_t gameid, string name, string ip, bool spoofed, string spoofedrealm, bool reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype )
 {
   void *Connection = GetIdleConnection( );
 
@@ -1188,7 +1188,7 @@ uint32_t MySQLGameUpdate( void *conn, string *error, uint32_t botid, uint32_t id
   }
 }
 
-uint32_t MySQLGamePlayerAdd( void *conn, string *error, uint32_t botid, uint32_t gameid, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype )
+uint32_t MySQLGamePlayerAdd( void *conn, string *error, uint32_t botid, uint32_t gameid, string name, string ip, bool spoofed, string spoofedrealm, bool reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype )
 {
   transform( name.begin( ), name.end( ), name.begin( ), (int (*)(int))tolower );
   uint32_t RowID = 0;

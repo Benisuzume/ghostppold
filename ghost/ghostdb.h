@@ -127,7 +127,7 @@ virtual void ReconUpdate( uint32_t hostcounter, uint32_t seconds );
 virtual vector<string> CommandList(  );
 virtual uint32_t GameAdd( string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
 virtual uint32_t GameUpdate( uint32_t id, string map, string gamename, string ownername, string creatorname, uint32_t players, string usernames, uint32_t slotsTotal, uint32_t totalGames, uint32_t totalPlayers, bool add );
-virtual uint32_t GamePlayerAdd( uint32_t gameid, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype );
+virtual uint32_t GamePlayerAdd( uint32_t gameid, string name, string ip, bool spoofed, string spoofedrealm, bool reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype );
 virtual uint32_t GamePlayerCount( string name );
 virtual CDBGamePlayerSummary *GamePlayerSummaryCheck( string name, string realm );
 virtual CDBVampPlayerSummary *VampPlayerSummaryCheck( string name );
@@ -166,7 +166,7 @@ virtual CCallableReconUpdate *ThreadedReconUpdate( uint32_t hostcounter, uint32_
 virtual CCallableCommandList *ThreadedCommandList( );
 virtual CCallableGameAdd *ThreadedGameAdd( string server, string map, string gamename, string ownername, uint32_t duration, uint32_t gamestate, string creatorname, string creatorserver, string savetype );
 virtual CCallableGameUpdate *ThreadedGameUpdate( uint32_t id, string map, string gamename, string ownername, string creatorname, uint32_t players, string usernames, uint32_t slotsTotal, uint32_t totalGames, uint32_t totalPlayers, bool add );
-virtual CCallableGamePlayerAdd *ThreadedGamePlayerAdd( uint32_t gameid, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype );
+virtual CCallableGamePlayerAdd *ThreadedGamePlayerAdd( uint32_t gameid, string name, string ip, bool spoofed, string spoofedrealm, bool reserved, uint32_t loadingtime, uint32_t left, string leftreason, uint32_t team, uint32_t colour, string savetype );
 virtual CCallableGamePlayerSummaryCheck *ThreadedGamePlayerSummaryCheck( string name, string realm );
 virtual CCallableVampPlayerSummaryCheck *ThreadedVampPlayerSummaryCheck( string name );
 virtual CCallableDotAGameAdd *ThreadedDotAGameAdd( uint32_t gameid, uint32_t winner, uint32_t min, uint32_t sec, string saveType );
@@ -711,9 +711,9 @@ protected:
 uint32_t m_GameID;
 string m_Name;
 string m_IP;
-uint32_t m_Spoofed;
+bool m_Spoofed;
 string m_SpoofedRealm;
-uint32_t m_Reserved;
+bool m_Reserved;
 uint32_t m_LoadingTime;
 uint32_t m_Left;
 string m_LeftReason;
@@ -723,7 +723,7 @@ string m_SaveType;
 uint32_t m_Result;
 
 public:
-CCallableGamePlayerAdd( uint32_t nGameID, string nName, string nIP, uint32_t nSpoofed, string nSpoofedRealm, uint32_t nReserved, uint32_t nLoadingTime, uint32_t nLeft, string nLeftReason, uint32_t nTeam, uint32_t nColour, string nSaveType ) : CBaseCallable( ), m_GameID( nGameID ), m_Name( nName ), m_IP( nIP ), m_Spoofed( nSpoofed ), m_SpoofedRealm( nSpoofedRealm ), m_Reserved( nReserved ), m_LoadingTime( nLoadingTime ), m_Left( nLeft ), m_LeftReason( nLeftReason ), m_Team( nTeam ), m_Colour( nColour ), m_SaveType( nSaveType ), m_Result( 0 )
+CCallableGamePlayerAdd( uint32_t nGameID, string nName, string nIP, bool nSpoofed, string nSpoofedRealm, bool nReserved, uint32_t nLoadingTime, uint32_t nLeft, string nLeftReason, uint32_t nTeam, uint32_t nColour, string nSaveType ) : CBaseCallable( ), m_GameID( nGameID ), m_Name( nName ), m_IP( nIP ), m_Spoofed( nSpoofed ), m_SpoofedRealm( nSpoofedRealm ), m_Reserved( nReserved ), m_LoadingTime( nLoadingTime ), m_Left( nLeft ), m_LeftReason( nLeftReason ), m_Team( nTeam ), m_Colour( nColour ), m_SaveType( nSaveType ), m_Result( 0 )
 {
 }
 virtual ~CCallableGamePlayerAdd( );
