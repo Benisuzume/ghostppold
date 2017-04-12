@@ -47,6 +47,7 @@ class CCallableTreePlayerSummaryCheck;
 class CCallableSnipePlayerSummaryCheck;
 class CCallableShipsPlayerSummaryCheck;
 class CCallableW3MMDPlayerSummaryCheck;
+class CCallableMostGamesPlayerCheck;
 class CCallableGameUpdate;
 
 typedef pair<string, CCallableBanCheck *> PairedBanCheck;
@@ -58,6 +59,7 @@ typedef pair<string, CCallableTreePlayerSummaryCheck *> PairedTPSCheck;
 typedef pair<string, CCallableSnipePlayerSummaryCheck *> PairedSPSCheck;
 typedef pair<string, CCallableShipsPlayerSummaryCheck *> PairedBPSCheck;
 typedef pair<string, CCallableW3MMDPlayerSummaryCheck *> PairedWPSCheck;
+typedef pair<string, CCallableMostGamesPlayerCheck *> PairedMGPCheck;
 
 class CGame : public CBaseGame
 {

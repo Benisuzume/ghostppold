@@ -59,6 +59,7 @@ class CCallableTreePlayerSummaryCheck;
 class CCallableShipsPlayerSummaryCheck;
 class CCallableSnipePlayerSummaryCheck;
 class CCallableW3MMDPlayerSummaryCheck;
+class CCallableMostGamesPlayerCheck;
 class CCallableDownloadAdd;
 class CCallableScoreCheck;
 class CCallableLeagueCheck;
@@ -78,6 +79,7 @@ class CDBTreePlayerSummary;
 class CDBShipsPlayerSummary;
 class CDBSnipePlayerSummary;
 class CDBW3MMDPlayerSummary;
+class CDBMostGamesPlayer;
 class CBNET;
 
 typedef pair<uint32_t, string> VarP;
@@ -139,6 +141,7 @@ virtual CDBTreePlayerSummary *TreePlayerSummaryCheck( string name, string realm 
 virtual CDBShipsPlayerSummary *ShipsPlayerSummaryCheck( string name, string realm );
 virtual CDBSnipePlayerSummary *SnipePlayerSummaryCheck( string name, string realm );
 virtual CDBW3MMDPlayerSummary *W3MMDPlayerSummaryCheck( string name, string realm, string category );
+virtual CDBMostGamesPlayer *MostGamesPlayerCheck( uint32_t days );
 virtual string FromCheck( uint32_t ip );
 virtual bool FromAdd( uint32_t ip1, uint32_t ip2, string country );
 virtual bool DownloadAdd( string map, uint32_t mapsize, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime );
@@ -176,6 +179,7 @@ virtual CCallableTreePlayerSummaryCheck *ThreadedTreePlayerSummaryCheck( string 
 virtual CCallableShipsPlayerSummaryCheck *ThreadedShipsPlayerSummaryCheck( string name, string realm );
 virtual CCallableSnipePlayerSummaryCheck *ThreadedSnipePlayerSummaryCheck( string name, string realm );
 virtual CCallableW3MMDPlayerSummaryCheck *ThreadedW3MMDPlayerSummaryCheck( string name, string realm, string category );
+virtual CCallableMostGamesPlayerCheck *ThreadedMostGamesPlayerCheck( uint32_t days );
 virtual CCallableDownloadAdd *ThreadedDownloadAdd( string map, uint32_t mapsize, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime );
 virtual CCallableScoreCheck *ThreadedScoreCheck( string category, string name, string server );
 virtual CCallableLeagueCheck *ThreadedLeagueCheck( string category, string name, string server, string gamename );
@@ -1031,6 +1035,32 @@ virtual CDBW3MMDPlayerSummary *GetResult( )
   return m_Result;
 }
 virtual void SetResult( CDBW3MMDPlayerSummary *nResult )
+{
+  m_Result = nResult;
+}
+};
+
+class CCallableMostGamesPlayerCheck : virtual public CBaseCallable
+{
+protected:
+uint32_t m_Days;
+CDBMostGamesPlayer *m_Result;
+
+public:
+CCallableMostGamesPlayerCheck( uint32_t nDays ) : CBaseCallable( ), m_Days( nDays ), m_Result( NULL )
+{
+}
+virtual ~CCallableMostGamesPlayerCheck( );
+
+virtual uint32_t GetDays( )
+{
+  return m_Days;
+}
+virtual CDBMostGamesPlayer *GetResult( )
+{
+  return m_Result;
+}
+virtual void SetResult( CDBMostGamesPlayer *nResult )
 {
   m_Result = nResult;
 }
@@ -2135,7 +2165,7 @@ float GetAvgDeaths( )
 };
 
 //
-// CDBW3MMDlayerSummary
+// CDBW3MMDPlayerSummary
 //
 
 class CDBW3MMDPlayerSummary
@@ -2185,6 +2215,35 @@ double GetScore( )
 int GetRank( )
 {
   return m_Rank;
+}
+};
+
+//
+// CDBMostGamesPlayer
+//
+
+class CDBMostGamesPlayer
+{
+private:
+string m_Server;
+string m_Name;
+uint32_t m_Games;
+
+public:
+CDBMostGamesPlayer( string nServer, string nName, uint32_t nGames );
+~CDBMostGamesPlayer( );
+
+string GetServer( )
+{
+  return m_Server;
+}
+string GetName( )
+{
+  return m_Name;
+}
+uint32_t GetGames( )
+{
+  return m_Games;
 }
 };
 

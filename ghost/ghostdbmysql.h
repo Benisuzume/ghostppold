@@ -221,6 +221,7 @@ virtual CCallableTreePlayerSummaryCheck *ThreadedTreePlayerSummaryCheck( string 
 virtual CCallableSnipePlayerSummaryCheck *ThreadedSnipePlayerSummaryCheck( string name, string realm );
 virtual CCallableShipsPlayerSummaryCheck *ThreadedShipsPlayerSummaryCheck( string name, string realm );
 virtual CCallableW3MMDPlayerSummaryCheck *ThreadedW3MMDPlayerSummaryCheck( string name, string realm, string category );
+virtual CCallableMostGamesPlayerCheck *ThreadedMostGamesPlayerCheck( uint32_t days );
 virtual CCallableDownloadAdd *ThreadedDownloadAdd( string map, uint32_t mapsize, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime );
 virtual CCallableScoreCheck *ThreadedScoreCheck( string category, string name, string server );
 virtual CCallableLeagueCheck *ThreadedLeagueCheck( string category, string name, string server, string gamename );
@@ -268,6 +269,7 @@ CDBTreePlayerSummary *MySQLTreePlayerSummaryCheck( void *conn, string *error, ui
 CDBSnipePlayerSummary *MySQLSnipePlayerSummaryCheck( void *conn, string *error, uint32_t botid, string name, string realm );
 CDBShipsPlayerSummary *MySQLShipsPlayerSummaryCheck( void *conn, string *error, uint32_t botid, string name, string realm );
 CDBW3MMDPlayerSummary *MySQLW3MMDPlayerSummaryCheck( void *conn, string *error, uint32_t botid, string name, string realm, string category );
+CDBMostGamesPlayer *MySQLMostGamesPlayerCheck( void *conn, string *error, uint32_t botid, uint32_t days );
 bool MySQLDownloadAdd( void *conn, string *error, uint32_t botid, string map, uint32_t mapsize, string name, string realm, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime );
 double *MySQLScoreCheck( void *conn, string *error, uint32_t botid, string category, string name, string server );
 uint32_t MySQLLeagueCheck( void *conn, string *error, uint32_t botid, string category, string name, string server, string gamename );
@@ -824,6 +826,27 @@ CMySQLCallableW3MMDPlayerSummaryCheck( string nName, string nRealm, string nCate
 {
 }
 virtual ~CMySQLCallableW3MMDPlayerSummaryCheck( )
+{
+}
+
+virtual void operator()( );
+virtual void Init( )
+{
+  CMySQLCallable :: Init( );
+}
+virtual void Close( )
+{
+  CMySQLCallable :: Close( );
+}
+};
+
+class CMySQLCallableMostGamesPlayerCheck : public CCallableMostGamesPlayerCheck, public CMySQLCallable
+{
+public:
+CMySQLCallableMostGamesPlayerCheck( uint32_t nDays, void *nConnection, uint32_t nSQLBotID, string nSQLServer, string nSQLDatabase, string nSQLUser, string nSQLPassword, uint16_t nSQLPort, CGHostDBMySQL *nDB ) : CBaseCallable( ), CCallableMostGamesPlayerCheck( nDays ), CMySQLCallable( nConnection, nSQLBotID, nSQLServer, nSQLDatabase, nSQLUser, nSQLPassword, nSQLPort, nDB )
+{
+}
+virtual ~CMySQLCallableMostGamesPlayerCheck( )
 {
 }
 

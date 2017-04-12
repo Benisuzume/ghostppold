@@ -520,6 +520,20 @@ CCallableW3MMDPlayerSummaryCheck *CGHostDBMySQL :: ThreadedW3MMDPlayerSummaryChe
   return Callable;
 }
 
+CCallableMostGamesPlayerCheck *CGHostDBMySQL :: ThreadedMostGamesPlayerCheck( uint32_t days )
+{
+  void *Connection = GetIdleConnection( );
+
+  if ( !Connection ) {
+    ++m_NumConnections;
+  }
+
+  CCallableMostGamesPlayerCheck *Callable = new CMySQLCallableMostGamesPlayerCheck( days, Connection, m_BotID, m_Server, m_Database, m_User, m_Password, m_Port, this );
+  CreateThread( Callable );
+  ++m_OutstandingCallables;
+  return Callable;
+}
+
 CCallableDownloadAdd *CGHostDBMySQL :: ThreadedDownloadAdd( string map, uint32_t mapsize, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime )
 {
   void *Connection = GetIdleConnection( );
@@ -1815,6 +1829,39 @@ CDBW3MMDPlayerSummary *MySQLW3MMDPlayerSummaryCheck( void *conn, string *error, 
   return W3MMDPlayerSummary;
 }
 
+CDBMostGamesPlayer *MySQLMostGamesPlayerCheck( void *conn, string *error, uint32_t botid, uint32_t days )
+{
+  string EscDays = UTIL_ToString(days);
+  CDBMostGamesPlayer *MostGamesPlayer = NULL;
+  string Query = "SELECT IFNULL(COUNT(*), 0) AS gamecount, IFNULL(name, 'Nobody'), IFNULL(spoofedrealm, 'Nowhere') FROM games JOIN gameplayers WHERE games.id = gameplayers.gameid AND DATEDIFF(NOW(), datetime) < " + EscDays + " GROUP BY name, spoofedrealm ORDER BY gamecount DESC LIMIT 1";
+
+  if ( mysql_real_query( (MYSQL*)conn, Query.c_str( ), Query.size( ) ) != 0 ) {
+    *error = mysql_error( (MYSQL*)conn );
+  } else {
+    MYSQL_RES *Result = mysql_store_result( (MYSQL*)conn );
+
+    if ( Result ) {
+      vector<string> Row = MySQLFetchRow( Result );
+
+      if ( Row.size( ) == 3 ) {
+        uint32_t games = UTIL_ToUInt32( Row[0] );
+        string name = Row[1];
+        string realm = Row[2];
+
+        // done
+
+        MostGamesPlayer = new CDBMostGamesPlayer( realm, name, games );
+      }
+
+      mysql_free_result( Result );
+    } else {
+      *error = mysql_error( (MYSQL*)conn );
+    }
+  }
+
+  return MostGamesPlayer;
+}
+
 bool MySQLDownloadAdd( void *conn, string *error, uint32_t botid, string map, uint32_t mapsize, string name, string ip, uint32_t spoofed, string spoofedrealm, uint32_t downloadtime )
 {
   bool Success = false;
@@ -2586,6 +2633,17 @@ void CMySQLCallableW3MMDPlayerSummaryCheck :: operator()( )
 
   if ( m_Error.empty( ) ) {
     m_Result = MySQLW3MMDPlayerSummaryCheck( m_Connection, &m_Error, m_SQLBotID, m_Name, m_Realm, m_Category );
+  }
+
+  Close( );
+}
+
+void CMySQLCallableMostGamesPlayerCheck :: operator()( )
+{
+  Init( );
+
+  if ( m_Error.empty( ) ) {
+    m_Result = MySQLMostGamesPlayerCheck( m_Connection, &m_Error, m_SQLBotID, m_Days );
   }
 
   Close( );

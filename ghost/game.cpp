@@ -2498,6 +2498,42 @@ bool CGame :: EventPlayerBotCommand( CGamePlayer *player, string command, string
     player->SetStatsDotASentTime( GetTime( ) );
   }
   //
+  // !MOSTGAMESWEEK
+  //
+  else if ( Command == "mostgamesweek" || Command == "mgw" ) {
+    CDBMostGamesPlayer* mgp = m_GHost->m_DB->ThreadedMostGamesPlayerCheck( 7 )->GetResult( );
+    string message;
+    if ( mgp == NULL ) {
+      message = "No games registered for the past week!";
+    } else {
+      message = mgp->GetName() + "@" + mgp->GetServer() + " has the most games with a total of " + UTIL_ToString( mgp->GetGames() ) + " in the past week!";
+    }
+
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
+      SendAllChat( message );
+    } else {
+      SendChat( player, message );
+    }
+  }
+  //
+  // !MOSTGAMESMONTH
+  //
+  else if ( Command == "mostgamesmonth" || Command == "mgm" ) {
+    CDBMostGamesPlayer* mgp = m_GHost->m_DB->ThreadedMostGamesPlayerCheck( 30 )->GetResult( );
+    string message;
+    if ( mgp == NULL ) {
+      message = "No games registered for the past month!";
+    } else {
+      message = mgp->GetName() + "@" + mgp->GetServer() + " has the most games with a total of " + UTIL_ToString( mgp->GetGames() ) + " in the past month!";
+    }
+
+    if ( player->GetSpoofed( ) && ( AdminAccess.any() || IsOwner( User ) ) ) {
+      SendAllChat( message );
+    } else {
+      SendChat( player, message );
+    }
+  }
+  //
   // !VERSION
   //
   else if ( Command == "version" ) {

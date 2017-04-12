@@ -201,6 +201,11 @@ CDBW3MMDPlayerSummary *CGHostDB :: W3MMDPlayerSummaryCheck( string name, string 
   return NULL;
 }
 
+CDBMostGamesPlayer *CGHostDB :: MostGamesPlayerCheck( uint32_t days )
+{
+  return NULL;
+}
+
 string CGHostDB :: FromCheck( uint32_t ip )
 {
   return "??";
@@ -367,6 +372,11 @@ CCallableSnipePlayerSummaryCheck *CGHostDB :: ThreadedSnipePlayerSummaryCheck( s
 }
 
 CCallableW3MMDPlayerSummaryCheck *CGHostDB :: ThreadedW3MMDPlayerSummaryCheck( string name, string realm, string category )
+{
+  return NULL;
+}
+
+CCallableMostGamesPlayerCheck *CGHostDB :: ThreadedMostGamesPlayerCheck( uint32_t days )
 {
   return NULL;
 }
@@ -562,6 +572,11 @@ CCallableSnipePlayerSummaryCheck :: ~CCallableSnipePlayerSummaryCheck( )
 }
 
 CCallableW3MMDPlayerSummaryCheck :: ~CCallableW3MMDPlayerSummaryCheck( )
+{
+  delete m_Result;
+}
+
+CCallableMostGamesPlayerCheck :: ~CCallableMostGamesPlayerCheck( )
 {
   delete m_Result;
 }
@@ -810,6 +825,16 @@ CDBW3MMDPlayerSummary :: CDBW3MMDPlayerSummary( string nServer, string nName, st
 }
 
 CDBW3MMDPlayerSummary :: ~CDBW3MMDPlayerSummary( )
+{
+
+}
+
+CDBMostGamesPlayer :: CDBMostGamesPlayer( string nServer, string nName, uint32_t nGames ) : m_Server( nServer ), m_Name( nName ), m_Games( nGames )
+{
+
+}
+
+CDBMostGamesPlayer :: ~CDBMostGamesPlayer( )
 {
 
 }
