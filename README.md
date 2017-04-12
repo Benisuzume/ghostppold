@@ -30,13 +30,13 @@ sudo apt-get install build-essential git libboost1.55-all-dev libgeoip-dev libgm
 After all the requirements are installed, you may procede with the compilation.
 
 1. Download the repository and enter it
-   ```
+```
 git clone https://github.com/naanselmo/uc-ghost.git
 cd uc-ghost
 ```
 
 2. Compile BNCSUtil and install it
-   ```
+```
 cd bncsutil/src/bncsutil
 make
 make install
@@ -44,7 +44,7 @@ cd ../../..
 ```
 
 3. Compile StormLib and install it
-   ```
+```
 cd StormLib/stormlib
 make
 make install
@@ -52,7 +52,7 @@ cd ../..
 ```
 
 4. Compile UC-Ghost and move the binary
-   ```
+```
 cd ghost
 make
 mv ghost++ ..
@@ -63,7 +63,7 @@ mv ghost++ ..
 6. Download MaxMind's Legacy GeoIP databases in binary format from [here](https://dev.maxmind.com/geoip/legacy/geolite/), renaming the extracted file to geoip.dat (or configuring "bot_geoipfile" in step 8 to match the file name and location).
 
 7. Create the default directories and files (other names may be used provided they're specified during step 8)
-   ```
+```
 mkdir mapcfgs maps replays savegames
 touch gameloaded.txt gameover.txt phrases.txt motd.txt welcome.txt
 ```
