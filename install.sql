@@ -347,6 +347,7 @@ CREATE TABLE `gametrack` (
   `time_created` TIMESTAMP DEFAULT 0,
   `time_active` TIMESTAMP DEFAULT 0,
   `playingtime` INT DEFAULT NULL,
+  PRIMARY KEY (`name`, `realm`),
   KEY `name` (`name`),
   KEY `realm` (`realm`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

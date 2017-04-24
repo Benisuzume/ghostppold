@@ -107,12 +107,12 @@ CREATE TRIGGER BanCacheUpdater_Delete AFTER DELETE ON bans
     WHERE `status` = 0 AND
           `banid` = old.id;
   END//
-  DELIMITER ;
+DELIMITER ;
 
-  -- Automatically recalculate player scores on the gametrack table
-  DROP TRIGGER IF EXISTS GameTrackUpdater_Insert;
-  DELIMITER //
-  CREATE TRIGGER GameTrackUpdater_Insert AFTER INSERT ON gameplayers
+-- Automatically recalculate player scores on the gametrack table
+DROP TRIGGER IF EXISTS GameTrackUpdater_Insert;
+DELIMITER //
+CREATE TRIGGER GameTrackUpdater_Insert AFTER INSERT ON gameplayers
   FOR EACH ROW
   BEGIN
     -- Variables start with "v_" to avoid name conflicts
@@ -128,11 +128,14 @@ CREATE TRIGGER BanCacheUpdater_Delete AFTER DELETE ON bans
 
     -- Create a list of the last 10 games played by this player
     -- Do this by concatenating the new game with the last 9 games played.
-    SELECT CONCAT_WS(',', new.gameid, SUBSTRING_INDEX(`lastgames`, ',', 9))
+    SELECT SUBSTRING_INDEX(`lastgames`, ',', 9)
     INTO   v_lastgames
     FROM   gametrack
     WHERE  `name` = new.name AND
            `realm` = new.spoofedrealm;
+
+    SELECT CONCAT_WS(',', new.gameid, v_lastgames)
+    INTO   v_lastgames;
 
     -- Add user to the gametrack table, or update his status
     INSERT INTO gametrack
