@@ -334,7 +334,7 @@ RUN echo "Installing Packages ..." &&\
 	apt-get install -y $PACKAGES
 
 # Copy Artifacts
-ADD rootfs /opt/ghostpp
+ADD rootfs /
 
 # Configuration
 RUN echo "Configuration ..." &&\
