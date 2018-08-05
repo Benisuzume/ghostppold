@@ -15,17 +15,26 @@ stages:
 # Build
 Assemble:
   stage: build
+  artifacts:
+    paths:
+      - dist/
   script:
   # Packages
   - apt-get update && apt-get install -y $PACKAGES
   - ln -s /usr/lib/x86_64-linux-gnu/libmysqlclient.so /usr/lib/x86_64-linux-gnu/libmysqlclient_r.so
-  - mkdir dist
+  - mkdir -p dist/lib dist/include
+  - cp /usr/lib/x86_64-linux-gnu/libmysqlclient.so dist/lib
   # BNCSUtil
   - cd bncsutil/src/bncsutil && make && make install
   - cd $CI_PROJECT_DIR
-  - cp /usr/lib/libbncsutil.so dist
+  - cp /usr/lib/libbncsutil.so dist/lib
   # StormLib
   - cd StormLib/stormlib/ && make && make install
   - cd $CI_PROJECT_DIR
+  - cp /usr/lib/libStorm.so dist/lib
+  - cp /usr/local/include/StormLib/StormLib.h dist/include
+  - cp /usr/local/include/StormLib/StormPort.h dist/include
+  # GhostPP
   - cd ghost/ && make
   - cd $CI_PROJECT_DIR
+  - cp ghost/ghost++ dist
