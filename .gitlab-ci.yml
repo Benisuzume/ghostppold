@@ -23,7 +23,7 @@ Assemble:
   # Packages
   - apt-get update && apt-get install -y build-essential git libgeoip-dev libgmp-dev zlib1g-dev libbz2-dev libmysqlclient-dev libboost-all-dev gettext-base
   - ln -s /usr/lib/x86_64-linux-gnu/libmysqlclient.so /usr/lib/x86_64-linux-gnu/libmysqlclient_r.so
-  - mkdir -p dist/lib dist/include
+  - mkdir -p dist/lib dist/include dist/config
   - cp /usr/lib/x86_64-linux-gnu/libmysqlclient.so dist/lib
   # BNCSUtil
   - cd bncsutil/src/bncsutil && make && make install
@@ -39,15 +39,24 @@ Assemble:
   - cd ghost/ && make
   - cd $CI_PROJECT_DIR
   - cp ghost/ghost++ dist
+  - cp default.cfg dist/config
+  - cp docker.cfg dist/config
+  - cp language.cfg dist/config
+  - cp gameloaded.txt dist/config
+  - cp gameover.txt dist/config
+  - cp phrases.txt dist/config
+  - cp motd.txt dist/config
+  - cp welcome.txt dist/config
 
 Docker Container:
   image: docker:stable
   stage: publish
   script:
   # copy artifacts
-  - cp dist/ghost++ docker/rootfs/opt/ghost++
+  - cp dist/ghost++ docker/rootfs/opt/ghostpp/ghost++
   - cp dist/lib/libbncsutil.so docker/rootfs/usr/lib
   - cp dist/lib/libStorm.so docker/rootfs/usr/local/lib
+  - cp dist/config/* docker/rootfs/opt/ghostpp
   # build container
   - cd docker
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY

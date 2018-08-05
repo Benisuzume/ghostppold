@@ -2,7 +2,7 @@
 # Dockerfile
 ############################################################
 
-# Extends: Ubuntu 17.10
+# Base Image
 FROM ubuntu:18.10
 
 ############################################################
@@ -40,9 +40,7 @@ ADD rootfs /opt/ghostpp
 # Configuration
 RUN echo "Configuration ..." &&\
 	# GHostPP - Libraries
-	cp /opt/ghostpp/ghost/default.cfg /opt/ghostpp/ghost/ghost.cfg &&\
-	mkdir mapcfgs maps replays savegames &&\
-	touch gameloaded.txt gameover.txt phrases.txt motd.txt welcome.txt
+	mkdir mapcfgs maps replays savegames
 
 # Build CleanUp
 RUN echo "CleanUp ..."
