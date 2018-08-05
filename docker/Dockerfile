@@ -322,14 +322,7 @@ ENV BNET_BNLSWARDENCOOKIE 2
 # Install packages. Notes:
 #   * git: a git client to check out repositories
 ENV PACKAGES="\
-  build-essential \
   git \
-  libgeoip-dev \
-  libgmp-dev \
-  zlib1g-dev \
-  libbz2-dev \
-  libmysqlclient-dev \
-  libboost-all-dev \
   gettext-base \
 "
 
@@ -354,4 +347,4 @@ RUN echo "CleanUp ..."
 ############################################################
 # Execution
 ############################################################
-CMD [ "/usr/local/bin/ghostpp.sh"]
+CMD [ "bash", "-c", "/usr/local/bin/ghostpp.sh"]
