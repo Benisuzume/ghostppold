@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # create environment based configuration
-envsubst < docker.cfg > ghost.cfg
+envsubst < /opt/ghostpp/docker.cfg > /opt/ghostpp/ghost.cfg
 
 # start bot
 /opt/ghostpp/ghost++
