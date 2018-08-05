@@ -1,0 +1,31 @@
+####
+# GitLab CI
+####
+
+# Image
+image: ubuntu:18.10
+
+variables:
+  PACKAGES: "build-essential git libgeoip-dev libgmp-dev zlib1g-dev libbz2-dev libmysqlclient-dev libboost-all-dev gettext-base"
+
+# Stages
+stages:
+  - build
+
+# Build
+Assemble:
+  stage: build
+  script:
+  # Packages
+  - apt-get update && apt-get install -y $PACKAGES
+  - ln -s /usr/lib/x86_64-linux-gnu/libmysqlclient.so /usr/lib/x86_64-linux-gnu/libmysqlclient_r.so
+  - mkdir dist
+  # BNCSUtil
+  - cd bncsutil/src/bncsutil && make && make install
+  - cd $CI_PROJECT_DIR
+  - cp /usr/lib/libbncsutil.so dist
+  # StormLib
+  - cd StormLib/stormlib/ && make && make install
+  - cd $CI_PROJECT_DIR
+  - cd ghost/ && make
+  - cd $CI_PROJECT_DIR
