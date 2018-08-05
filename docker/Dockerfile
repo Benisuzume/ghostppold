@@ -339,7 +339,10 @@ ADD rootfs /
 # Configuration
 RUN echo "Configuration ..." &&\
 	# GHostPP - Libraries
-	mkdir mapcfgs maps replays savegames
+	mkdir mapcfgs maps replays savegames &&\
+	# Permissions
+	chmod +x /usr/local/bin/ghostpp.sh &&\
+	chmod +x /opt/ghostpp/ghost++
 
 # Build CleanUp
 RUN echo "CleanUp ..."
