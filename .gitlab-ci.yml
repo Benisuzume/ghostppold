@@ -5,8 +5,8 @@
 # Image
 image: ubuntu:18.10
 
-variables:
-  PACKAGES: "build-essential git libgeoip-dev libgmp-dev zlib1g-dev libbz2-dev libmysqlclient-dev libboost-all-dev gettext-base"
+services:
+  - docker:dind
 
 # Stages
 stages:
@@ -21,7 +21,7 @@ Assemble:
       - dist/
   script:
   # Packages
-  - apt-get update && apt-get install -y $PACKAGES
+  - apt-get update && apt-get install -y build-essential git libgeoip-dev libgmp-dev zlib1g-dev libbz2-dev libmysqlclient-dev libboost-all-dev gettext-base
   - ln -s /usr/lib/x86_64-linux-gnu/libmysqlclient.so /usr/lib/x86_64-linux-gnu/libmysqlclient_r.so
   - mkdir -p dist/lib dist/include
   - cp /usr/lib/x86_64-linux-gnu/libmysqlclient.so dist/lib
@@ -41,6 +41,7 @@ Assemble:
   - cp ghost/ghost++ dist
 
 Docker Container:
+  image: docker:stable
   stage: publish
   script:
   # copy artifacts
