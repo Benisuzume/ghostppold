@@ -26,7 +26,7 @@ ENV BOT_LANGUAGE language.cfg
 ###  this path must contain war3.exe, storm.dll, and game.dll
 ###  if this path contains War3Patch.mpq the bot will attempt to extract "Scripts\common.j" and "Scripts\blizzard.j" on startup and write them to bot_mapcfgpath (which is defined later in this file)
 ###  common.j and blizzard.j are only required for automatically calculating map_crc, you do not need them if your map config files already contain map_crc
-ENV BOT_WAR3PATH C:\Program Files\Warcraft III
+ENV BOT_WAR3PATH /opt/ghostpp/war3
 
 ### whether to act as Warcraft III: The Frozen Throne or not
 ###  set this to 0 to act as Warcraft III: Reign of Chaos (you WILL NOT need to enter a TFT cd key to login to battle.net)
@@ -64,32 +64,30 @@ ENV BOT_COMMANDTRIGGER !
 ### the path to the directory where you keep your map config files
 ###  this directory can also contain common.j and blizzard.j (extracted from War3Patch.mpq)
 ###  common.j and blizzard.j are only required for automatically calculating map_crc, you do not need them if your map config files already contain map_crc
-ENV BOT_MAPCFGPATH mapcfgs
+ENV BOT_MAPCFGPATH data/mapcfgs
 
 ### the path to the directory where you keep your savegame files
-ENV BOT_SAVEGAMEPATH savegames
+ENV BOT_SAVEGAMEPATH data/savegames
 
 ### the path to the directory where you keep your map files
 ###  GHost++ doesn't require map files but if it has access to them it can send them to players and automatically calculate most map config values
 ###  GHost++ will search [bot_mappath + map_localpath] for the map file (map_localpath is set in each map's config file)
-ENV BOT_MAPPATH maps
+ENV BOT_MAPPATH data/maps
 
 ### whether to save replays or not
 ENV BOT_SAVEREPLAYS 0
 
 ### the path to the directory where you want GHost++ to save replays
-ENV BOT_REPLAYPATH replays
+ENV BOT_REPLAYPATH data/replays
 
 ### the Warcraft 3 version to save replays as
-ENV REPLAY_WAR3VERSION 26
+ENV REPLAY_WAR3VERSION 29
 
 ### the Warcraft 3 build number to save replays as (this is specific to each Warcraft 3 version)
-###  patch 1.23:  war3version 23, buildnumber 6058
-###  patch 1.24:  war3version 24, buildnumber 6059
-###  patch 1.24b: war3version 24, buildnumber 6059
-###  patch 1.25:  war3version 25, buildnumber 6059
-###  patch 1.26:  war3version 26, buildnumber 6059
-ENV BOT_REPLAY_BUILDNUMBER 6059
+###  patch 1.23: 		war3version 23, buildnumber 6058
+###  patch 1.24 - 1.28: war3version 2X, buildnumber 6059
+###  patch 1.29: 		war3version 29, buildnumber 6060
+ENV BOT_REPLAY_BUILDNUMBER 6060
 
 ### the bot's virtual host name as it appears in the game lobby
 ###  colour codes are defined by the sequence "|cFF" followed by a six character hexadecimal colour in RRGGBB format (e.g. 0000FF for pure blue)
@@ -256,7 +254,7 @@ ENV ADMINGAME_MAP ""
 
 ## LAN CONFIGURATION
 ### the Warcraft 3 version to use when broadcasting LAN games
-ENV LAN_WAR3VERSION 26
+ENV LAN_WAR3VERSION 29
 
 ### the UDP broadcast target
 ###  if this value is blank the bot will try to broadcast LAN games on the default interface which is chosen by your operating system
@@ -348,11 +346,13 @@ ADD rootfs /
 RUN echo "Configuration ..." &&\
 	# Ghost++ Data 
 	cd /opt/ghostpp &&\
-	curl -o /opt/ghostpp/GeoIP.dat.gz http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz &&\ 
+	curl -o /opt/ghostpp/GeoIP.dat.gz http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz &&\
 	gunzip /opt/ghostpp/GeoIP.dat.gz &&\ 
-	mv /opt/ghostpp/GeoIP.dat /opt/ghostpp/geoip.dat &&\ 
-	# Ghost++ Configuration
-	mkdir mapcfgs maps replays savegames &&\
+	mv /opt/ghostpp/GeoIP.dat /opt/ghostpp/geoip.dat &&\
+	# War3 Data
+	curl -o "/opt/ghostpp/war3/Warcraft III.exe" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/Warcraft%20III.exe?inline=false &&\
+	curl -o "/opt/ghostpp/data/mapcfgs/Blizzard.j" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/Blizzard.j?inline=false &&\
+	curl -o "/opt/ghostpp/data/mapcfgs/common.j" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/common.j?inline=false &&\
 	# Permissions
 	chmod +x /usr/local/bin/ghostpp.sh &&\
 	chmod +x /opt/ghostpp/ghost++
