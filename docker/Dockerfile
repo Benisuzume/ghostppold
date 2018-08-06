@@ -350,6 +350,7 @@ RUN echo "Configuration ..." &&\
 	cd /opt/ghostpp &&\
 	curl -o /opt/ghostpp/GeoIP.dat.gz http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz &&\ 
 	gunzip /opt/ghostpp/GeoIP.dat.gz &&\ 
+	mv /opt/ghostpp/GeoIP.dat /opt/ghostpp/geoip.dat &&\ 
 	# Ghost++ Configuration
 	mkdir mapcfgs maps replays savegames &&\
 	# Permissions
