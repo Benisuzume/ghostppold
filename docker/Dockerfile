@@ -234,6 +234,9 @@ ENV BOT_MATCHMAKINGMETHOD 1
 ###  set it to 0 to disable mapgametype overwrite
 ENV BOT_MAPGAMETYPE 0
 
+### GeoIP File
+ENV BOT_GEOIPFILE /opt/ghostpp/geoip.dat
+
 ## bot configuration
 ### whether to create the admin game or not (see readme.txt for more information)
 ENV ADMINGAME_CREATE 0
@@ -311,7 +314,7 @@ ENV BNET_COMMANDTRIGGER "!"
 ENV BNET_HOLDFRIENDS 1
 ENV BNET_HOLDCLAN 1
 ENV BNET_PUBLICCOMMANDS 1
-ENV BNET_BNLSSERVER phix.no-ip.org
+ENV BNET_BNLSSERVER pyro.no-ip.biz
 ENV BNET_BNLSPORT 9367
 ENV BNET_BNLSWARDENCOOKIE 2
 
@@ -322,8 +325,9 @@ ENV BNET_BNLSWARDENCOOKIE 2
 # Install packages. Notes:
 #   * git: a git client to check out repositories
 ENV PACKAGES="\
-  git \
   gettext-base \
+  curl \
+  gzip \
 "
 
 # Packages
@@ -339,6 +343,11 @@ ADD rootfs /
 # Configuration
 RUN echo "Configuration ..." &&\
 	# GHostPP - Libraries
+	# Ghost++ Data
+	curl -o /opt/ghostpp/geoip.dat.gz http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz &&\
+	gunzip GeoIP.dat.gz &&\
+	rm GeoIP.dat.gz &&\
+	# Ghost++ Configuration
 	mkdir mapcfgs maps replays savegames &&\
 	# Permissions
 	chmod +x /usr/local/bin/ghostpp.sh &&\
