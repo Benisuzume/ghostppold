@@ -8,4 +8,5 @@ export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 envsubst < /opt/ghostpp/docker.cfg > /opt/ghostpp/ghost.cfg
 
 # start bot
-/opt/ghostpp/ghost++
+cd /opt/ghostpp
+./ghost++
