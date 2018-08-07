@@ -1365,7 +1365,13 @@ void CGHost :: SetConfigs( CConfig *CFG )
 
 void CGHost :: ExtractScripts( )
 {
-  string PatchMPQFileName = m_Warcraft3Path + "War3Patch.mpq";
+  // war3version >= 1.29
+  string PatchMPQFileName = m_Warcraft3Path + "War3x.mpq";
+
+  // war3version < 1.29
+  if( !UTIL_FileExists( PatchMPQFileName ) )
+		PatchMPQFileName = m_Warcraft3Path + "War3Patch.mpq";
+  
   HANDLE PatchMPQ;
 
   if ( SFileOpenArchive( PatchMPQFileName.c_str( ), 0, MPQ_OPEN_FORCE_MPQ_V1, &PatchMPQ ) ) {
