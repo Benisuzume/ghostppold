@@ -56,7 +56,7 @@ void CBNCSUtilInterface :: Reset( string userName, string userPassword )
   m_NLS = new NLS( userName, userPassword );
 }
 
-bool CBNCSUtilInterface :: HELP_SID_AUTH_CHECK( bool TFT, string war3Path, string keyROC, string keyTFT, string valueStringFormula, string mpqFileName, BYTEARRAY clientToken, BYTEARRAY serverToken )
+bool CBNCSUtilInterface :: HELP_SID_AUTH_CHECK( bool TFT, uint32_t war3Version, string war3Path, string keyROC, string keyTFT, string valueStringFormula, string mpqFileName, BYTEARRAY clientToken, BYTEARRAY serverToken )
 {
   string FileWar3EXE = war3Path + "Warcraft III.exe";
 
