@@ -718,7 +718,6 @@ CGHost :: ~CGHost( )
 
   delete m_Language;
   delete m_Map;
-  delete m_AdminMap;
   delete m_AutoHostMap;
   delete m_SaveGame;
 }
