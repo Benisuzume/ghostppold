@@ -87,7 +87,7 @@ ENV REPLAY_WAR3VERSION 29
 ###  patch 1.23: 		war3version 23, buildnumber 6058
 ###  patch 1.24 - 1.28: war3version 2X, buildnumber 6059
 ###  patch 1.29: 		war3version 29, buildnumber 6060
-ENV BOT_REPLAY_BUILDNUMBER 6060
+ENV REPLAY_BUILDNUMBER 6060
 
 ### the bot's virtual host name as it appears in the game lobby
 ###  colour codes are defined by the sequence "|cFF" followed by a six character hexadecimal colour in RRGGBB format (e.g. 0000FF for pure blue)
@@ -351,8 +351,11 @@ RUN echo "Configuration ..." &&\
 	mv /opt/ghostpp/GeoIP.dat /opt/ghostpp/geoip.dat &&\
 	# War3 Data
 	curl -o "/opt/ghostpp/war3/Warcraft III.exe" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/Warcraft%20III.exe?inline=false &&\
-	curl -o "/opt/ghostpp/data/mapcfgs/Blizzard.j" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/Blizzard.j?inline=false &&\
+	curl -o "/opt/ghostpp/data/mapcfgs/blizzard.j" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/Blizzard.j?inline=false &&\
 	curl -o "/opt/ghostpp/data/mapcfgs/common.j" https://gitlab.com/PhilippHeuer/war3-data/raw/master/1.29.0/common.j?inline=false &&\
+	mv "/opt/ghostpp/war3/Warcraft III.exe" "/opt/ghostpp/war3/war3.exe" &&\
+	touch /opt/ghostpp/war3/storm.dll &&\
+	touch /opt/ghostpp/war3/game.dll &&\
 	# Permissions
 	chmod +x /usr/local/bin/ghostpp.sh &&\
 	chmod +x /opt/ghostpp/ghost++
