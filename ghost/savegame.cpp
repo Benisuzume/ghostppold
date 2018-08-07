@@ -93,7 +93,7 @@ void CSaveGame :: ParseSaveGame( )
   READB( ISS, &Garbage2, 2 );       // ???
   READB( ISS, &m_NumSlots, 1 );     // number of slots
 
-  if ( m_NumSlots > MAX_SLOTS ) {
+  if ( m_NumSlots > 12 ) {
     CONSOLE_Print( "[SAVEGAME] invalid savegame (too many slots)" );
     m_Valid = false;
     return;
