@@ -556,14 +556,14 @@ bool CBaseGame :: Update( void *fd, void *send_fd )
 
       uint32_t FixedHostCounter = m_HostCounter & 0x0FFFFFFF;
 
-      // we send 12 for SlotsTotal because this determines how many PID's Warcraft 3 allocates
-      // we need to make sure Warcraft 3 allocates at least SlotsTotal + 1 but at most 12 PID's
-      // this is because we need an extra PID for the virtual host player (but we always delete the virtual host player when the 12th person joins)
-      // however, we can't send 13 for SlotsTotal because this causes Warcraft 3 to crash when sharing control of units
-      // nor can we send SlotsTotal because then Warcraft 3 crashes when playing maps with less than 12 PID's (because of the virtual host player taking an extra PID)
-      // we also send 12 for SlotsOpen because Warcraft 3 assumes there's always at least one player in the game (the host)
+      // we send MAX_SLOTS for SlotsTotal because this determines how many PID's Warcraft 3 allocates
+      // we need to make sure Warcraft 3 allocates at least SlotsTotal + 1 but at most MAX_SLOTS PID's
+      // this is because we need an extra PID for the virtual host player (but we always delete the virtual host player when the 24th person joins)
+      // however, we can't send 25 for SlotsTotal because this causes Warcraft 3 to crash when sharing control of units
+      // nor can we send SlotsTotal because then Warcraft 3 crashes when playing maps with less than MAX_SLOTS PID's (because of the virtual host player taking an extra PID)
+      // we also send MAX_SLOTS for SlotsOpen because Warcraft 3 assumes there's always at least one player in the game (the host)
       // so if we try to send accurate numbers it'll always be off by one and results in Warcraft 3 assuming the game is full when it still needs one more player
-      // the easiest solution is to simply send 12 for both so the game will always show up as (1/12) players
+      // the easiest solution is to simply send MAX_SLOTS for both so the game will always show up as (1/MAX_SLOTS) players
 
       uint32_t slotstotal = m_Slots.size( );
       uint32_t slotsopen = GetSlotsOpen();
@@ -2210,7 +2210,7 @@ CGamePlayer *CBaseGame :: EventPlayerJoined( CPotentialPlayer *potential, CIncom
       unsigned char NumOtherPlayers = 0;
 
       for ( unsigned char i = 0; i < m_Slots.size( ); ++i ) {
-        if ( m_Slots[i].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[i].GetTeam( ) != 12 ) {
+        if ( m_Slots[i].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[i].GetTeam( ) != MAX_SLOTS ) {
           NumOtherPlayers++;
         }
       }
@@ -2790,7 +2790,7 @@ void CBaseGame :: EventPlayerChangeTeam( CGamePlayer *player, unsigned char team
       unsigned char NumOtherPlayers = 0;
 
       for ( unsigned char i = 0; i < m_Slots.size( ); ++i ) {
-        if ( m_Slots[i].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[i].GetTeam( ) != 12 && m_Slots[i].GetPID( ) != player->GetPID( ) ) {
+        if ( m_Slots[i].GetSlotStatus( ) == SLOTSTATUS_OCCUPIED && m_Slots[i].GetTeam( ) != MAX_SLOTS && m_Slots[i].GetPID( ) != player->GetPID( ) ) {
           ++NumOtherPlayers;
         }
       }
@@ -3466,7 +3466,7 @@ unsigned char CBaseGame :: GetNewColour( )
 {
   // find an unused colour for a player to use
 
-  for ( unsigned char TestColour = 0; TestColour < 12; ++TestColour ) {
+  for ( unsigned char TestColour = 0; TestColour < MAX_SLOTS; ++TestColour ) {
     bool InUse = false;
 
     for ( unsigned char i = 0; i < m_Slots.size( ); ++i ) {
@@ -3789,7 +3789,7 @@ void CBaseGame :: ComputerSlot( unsigned char SID, unsigned char skill, bool kic
 
 void CBaseGame :: ColourSlot( unsigned char SID, unsigned char colour )
 {
-  if ( SID < m_Slots.size( ) && colour < 12 ) {
+  if ( SID < m_Slots.size( ) && colour < MAX_SLOTS ) {
     // make sure the requested colour isn't already taken
 
     bool Taken = false;
@@ -3861,7 +3861,7 @@ void CBaseGame :: ShuffleSlots( )
   vector<CGameSlot> PlayerSlots;
 
   for ( vector<CGameSlot> :: iterator i = m_Slots.begin( ); i != m_Slots.end( ); ++i ) {
-    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
+    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != MAX_SLOTS ) {
       PlayerSlots.push_back( *i );
     }
   }
@@ -3945,7 +3945,7 @@ void CBaseGame :: ShuffleSlots( )
   vector<CGameSlot> Slots;
 
   for ( vector<CGameSlot> :: iterator i = m_Slots.begin( ); i != m_Slots.end( ); ++i ) {
-    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != 12 ) {
+    if ( (*i).GetSlotStatus( ) != SLOTSTATUS_CLOSED && (*i).GetComputer( ) == 0 && (*i).GetTeam( ) != MAX_SLOTS ) {
       Slots.push_back( *CurrentPlayer );
       ++CurrentPlayer;
     } else {
@@ -3972,7 +3972,7 @@ vector<unsigned char> CBaseGame :: BalanceSlotsRecursive( vector<unsigned char> 
   vector<unsigned char> BestOrdering = PlayerIDs;
   double BestDifference = -1.0;
 
-  for ( unsigned char i = StartTeam; i < 12; ++i ) {
+  for ( unsigned char i = StartTeam; i < MAX_SLOTS; ++i ) {
     if ( TeamSizes[i] > 0 ) {
       unsigned char Mid = TeamSizes[i];
 
@@ -3998,7 +3998,7 @@ vector<unsigned char> CBaseGame :: BalanceSlotsRecursive( vector<unsigned char> 
         vector<unsigned char> :: iterator CurrentPID = TestOrdering.begin( );
         double TeamScores[12];
 
-        for ( unsigned char j = StartTeam; j < 12; ++j ) {
+        for ( unsigned char j = StartTeam; j < MAX_SLOTS; ++j ) {
           TeamScores[j] = 0.0;
 
           for ( unsigned char k = 0; k < TeamSizes[j]; ++k ) {
@@ -4011,9 +4011,9 @@ vector<unsigned char> CBaseGame :: BalanceSlotsRecursive( vector<unsigned char> 
 
         double LargestDifference = 0.0;
 
-        for ( unsigned char j = StartTeam; j < 12; ++j ) {
+        for ( unsigned char j = StartTeam; j < MAX_SLOTS; ++j ) {
           if ( TeamSizes[j] > 0 ) {
-            for ( unsigned char k = j + 1; k < 12; ++k ) {
+            for ( unsigned char k = j + 1; k < MAX_SLOTS; ++k ) {
               if ( TeamSizes[k] > 0 ) {
                 double Difference = abs( TeamScores[j] - TeamScores[k] );
 
@@ -4040,7 +4040,7 @@ vector<unsigned char> CBaseGame :: BalanceSlotsRecursive( vector<unsigned char> 
 
   int currentPlayer = 0;
 
-  for ( unsigned char i = 0; i < 12; ++i ) {
+  for ( unsigned char i = 0; i < MAX_SLOTS; ++i ) {
     if ( TeamSizes[i] > 0 ) {
       unsigned char bestIndex = currentPlayer;
       double bestScore = PlayerScores[BestOrdering[currentPlayer]];
@@ -4090,7 +4090,7 @@ void CBaseGame :: BalanceSlots( )
       if ( SID < m_Slots.size( ) ) {
         unsigned char Team = m_Slots[SID].GetTeam( );
 
-        if ( Team < 12 ) {
+        if ( Team < MAX_SLOTS ) {
           // we are forced to use a default score because there's no way to balance the teams otherwise
 
           double Score = (*i)->GetScore( );
@@ -4125,7 +4125,7 @@ void CBaseGame :: BalanceSlots( )
   uint32_t AlgorithmCost = 0;
   uint32_t PlayersLeft = PlayerIDs.size( );
 
-  for ( unsigned char i = 0; i < 12; ++i ) {
+  for ( unsigned char i = 0; i < MAX_SLOTS; ++i ) {
     if ( TeamSizes[i] > 0 ) {
       if ( AlgorithmCost == 0 ) {
         AlgorithmCost = nCr( PlayersLeft, TeamSizes[i] );
@@ -4156,7 +4156,7 @@ void CBaseGame :: BalanceSlots( )
 
   vector<unsigned char> :: iterator CurrentPID = BestOrdering.begin( );
 
-  for ( unsigned char i = 0; i < 12; ++i ) {
+  for ( unsigned char i = 0; i < MAX_SLOTS; ++i ) {
     unsigned char CurrentSlot = 0;
 
     for ( unsigned char j = 0; j < TeamSizes[i]; ++j ) {
@@ -4190,7 +4190,7 @@ void CBaseGame :: BalanceSlots( )
   SendAllChat( m_GHost->m_Language->BalancingSlotsCompleted( ) );
   SendAllSlotInfo( );
 
-  for ( unsigned char i = 0; i < 12; ++i ) {
+  for ( unsigned char i = 0; i < MAX_SLOTS; ++i ) {
     bool TeamHasPlayers = false;
     double TeamScore = 0.0;
 

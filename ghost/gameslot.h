@@ -44,6 +44,9 @@
 #define SLOTCOMP_NORMAL   1
 #define SLOTCOMP_HARD   2
 
+// MAX SLOTS
+#define MAX_SLOTS   24
+
 //
 // CGameSlot
 //
